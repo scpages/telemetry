@@ -40,13 +40,18 @@ jobs:
         shell: pwsh
         run: Copy-Item publish/Integrator.exe SCTelemetry-Integrator.exe
 
-      - name: Create GitHub Release
+      # Create the release and attach the exe. If a release for this tag already
+      # exists (e.g. it was drafted in the UI first), just upload the asset to it.
+      - name: Create or update GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "${{ inputs.tag || github.ref_name }}"
-          SCTelemetry-Integrator.exe
-          --target "${{ github.sha }}"
-          --title "SCTelemetry Integrator ${{ inputs.tag || github.ref_name }}"
-          --notes "Self-contained Windows build — no .NET install needed. Download **SCTelemetry-Integrator.exe** and run it."
+          TAG: ${{ inputs.tag || github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          $notes = "Self-contained Windows build — no .NET install needed. Download **SCTelemetry-Integrator.exe** and run it."
+          gh release create "$env:TAG" SCTelemetry-Integrator.exe --target "$env:SHA" --title "SCTelemetry Integrator $env:TAG" --notes "$notes"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Release already exists — uploading asset instead."
+            gh release upload "$env:TAG" SCTelemetry-Integrator.exe --clobber
+          }
