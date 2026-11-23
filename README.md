@@ -37,3 +37,12 @@ All telemetry data and history are stored in memory only.
 
 #### Groups
 ![Groups](docs/webapp_groups.png)
+
+## How to enable telemetry in Star Citizen
+Create new or add content into file, located where you game is installed (not the launcher) ```StarCitizen\<channel>\user.cfg``` this 3 lines:
+```
+grpc.client.server.enabled = 1  
+grpc.client.server.port = 50051  
+server.game.telemetry.enabled = 1
+```
+
