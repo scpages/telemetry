@@ -16,6 +16,8 @@ Examples of tools you could use with the Integrator:
 - Stream Deck
 - ...
 
+![The Integrator's status window](docs/integrator.png)
+
 ## SCTelemetry - WebApp
 WebApp is a dependency-free Node.js web application with two main parts: an API and a UI.
 ### API
@@ -26,6 +28,10 @@ To prevent leaking information to other players, both reading and publishing are
 ### UI
 The WebApp is a full-featured website whose main purpose is to manage the groups, access, and sources of the telemetry data.  
 It supports login via Discord.
+
+![Managing a source — its token and history size](docs/webapp_sources.png)
+
+![Groups — bundling sources behind one read-only endpoint](docs/webapp_groups.png)
 
 The WebApp stores its configuration data locally in JSON, so no database system is required.  
 All telemetry data and history are stored in memory only.
