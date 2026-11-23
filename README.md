@@ -16,6 +16,8 @@ Examples of tools you could use with the Integrator:
 - Stream Deck
 - ...
 
+To download this tool, just choose latest relase and download single exe file - https://github.com/scpages/telemetry/releases 
+
 ![The Integrator's status window](docs/integrator.png)
 
 ## SCTelemetry - WebApp
@@ -31,6 +33,15 @@ It supports login via Discord.
 
 The WebApp stores its configuration data locally in JSON, so no database system is required.  
 All telemetry data and history are stored in memory only.
+
+To download this tool, ideally, clone this git repository.  
+You will need Node.js v20 installed. You can then run it via:
+```
+cd web
+cp .env.example .env
+(edit the .env file)  
+node server.js   
+```
 
 #### Sources
 ![Sources](docs/webapp_sources.png)
