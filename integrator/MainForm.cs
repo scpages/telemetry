@@ -33,6 +33,7 @@ internal sealed class MainForm : Form
     private readonly TextBox _localBind = new() { Width = 180 };
     private readonly TextBox _localPort = new() { Width = 70 };
     private readonly Label _localStatus = new() { AutoSize = true };
+    private readonly Button _localOpen = new() { Text = "Open in browser", Width = 150, Height = 28, Enabled = false };
 
     // tabs
     private readonly FlowLayoutPanel _tabbar = new() { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, Padding = new Padding(10, 8, 0, 0), Margin = new Padding(0) };
@@ -194,6 +195,8 @@ internal sealed class MainForm : Form
         Labeled(g, "Port", _localPort);
         Full(g, Spacer(2));
         Full(g, _localStatus);
+        _localOpen.Click += (_, _) => OpenUrl(LocalUrl());
+        Full(g, _localOpen);
         Full(g, new Label { Text = "Serves the latest frame with no auth. Add ?path=a.b.c for one value.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
 
         _localOn.CheckedChanged += (_, _) => { if (!_loading) { _tray.SetLocal(_localOn.Checked, _localBind.Text.Trim(), ParsePort()); Refresh_(); } };
@@ -214,6 +217,14 @@ internal sealed class MainForm : Form
     }
 
     private int ParsePort() => int.TryParse(_localPort.Text.Trim(), out var p) && p is > 0 and < 65536 ? p : 8080;
+
+    /// <summary>A browsable URL for the running local server (wildcard binds → localhost).</summary>
+    private string LocalUrl()
+    {
+        string bind = _tray.Config.LocalBind;
+        string host = string.IsNullOrWhiteSpace(bind) || bind is "0.0.0.0" or "*" or "+" ? "127.0.0.1" : bind;
+        return $"http://{host}:{_tray.Config.LocalPort}/";
+    }
 
     // ---- layout helpers ----
 
@@ -369,6 +380,8 @@ internal sealed class MainForm : Form
         else if (ls.Error != null) { _localStatus.Text = "Status: error — " + ls.Error; _localStatus.ForeColor = Theme.Red; }
         else if (ls.Running) { _localStatus.Text = "Status: serving at " + ls.Prefix.Replace("+", _tray.Config.LocalBind); _localStatus.ForeColor = Theme.Green; }
         else { _localStatus.Text = "Status: starting…"; _localStatus.ForeColor = Theme.Muted; }
+
+        _localOpen.Enabled = ls.Running;
     }
 
     private static void Set(Label dot, Label text, string caption, bool ok, string okWord, string badWord, bool neutralWhenGameOff = false, bool gameOn = true)
