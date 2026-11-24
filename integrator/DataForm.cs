@@ -12,6 +12,7 @@ internal sealed class DataForm : Form
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(760, 560);
         BackColor = Theme.Bg;
+        if (AppCore.AppIcon is { } appIcon) Icon = appIcon;
 
         var split = new SplitContainer
         {
@@ -21,8 +22,8 @@ internal sealed class DataForm : Form
             BackColor = Theme.Line,
         };
 
-        split.Panel1.Controls.Add(MakePane("Raw — decoded from the game", raw));
-        split.Panel2.Controls.Add(MakePane("Processed — what gets uploaded", processed));
+        split.Panel1.Controls.Add(MakePane("Raw — field numbers, straight from gRPC (no schema)", raw));
+        split.Panel2.Controls.Add(MakePane("Polished — decoded to names (what gets uploaded)", processed));
 
         Controls.Add(split);
     }

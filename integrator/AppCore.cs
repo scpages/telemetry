@@ -1,3 +1,4 @@
+using System.Drawing;
 using Integrator.Protobuf;
 
 namespace Integrator;
@@ -6,6 +7,24 @@ namespace Integrator;
 internal static class AppCore
 {
     public const string Repo = "https://github.com/scpages/telemetry";
+
+    private static Icon? _appIcon;
+
+    /// <summary>The app/window icon (same image as the website favicon), embedded in the exe.</summary>
+    public static Icon? AppIcon
+    {
+        get
+        {
+            if (_appIcon != null) return _appIcon;
+            try
+            {
+                using Stream? s = typeof(AppCore).Assembly.GetManifestResourceStream("Integrator.app.ico");
+                if (s != null) _appIcon = new Icon(s);
+            }
+            catch { /* fall back to the default window icon */ }
+            return _appIcon;
+        }
+    }
 
     public static string Version =>
         typeof(AppCore).Assembly.GetName().Version is { } v ? $"{v.Major}.{v.Minor}.{v.Build}" : "0.0.0";

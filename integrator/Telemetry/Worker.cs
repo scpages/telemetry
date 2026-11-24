@@ -77,9 +77,9 @@ internal sealed class Worker : IDisposable
                     TelemetryUp = false;
                     wait = IdlePoll;
                 }
-                else if (!_cfg.SendData && !_cfg.LocalServerEnabled)
+                else if (!_cfg.SendData && !_cfg.LocalServerEnabled && !_cfg.SaveToFile)
                 {
-                    Phase = "idle (sending + local server both off)";
+                    Phase = "idle (all destinations off)";
                     wait = IdlePoll;
                 }
                 else if (!EnsureSchema())
@@ -89,6 +89,7 @@ internal sealed class Worker : IDisposable
                 else
                 {
                     var (_, processed) = await CaptureAsync(ct);   // sets TelemetryUp + LastFrame
+                    if (_cfg.SaveToFile) WriteFile(processed);
                     if (_cfg.SendData)
                     {
                         await _uploader.PostAsync(processed, ct);
@@ -99,7 +100,7 @@ internal sealed class Worker : IDisposable
                     }
                     else
                     {
-                        Phase = "serving locally";
+                        Phase = _cfg.SaveToFile ? "saving to file" : "serving locally";
                     }
                     LastError = null;
                 }
@@ -133,7 +134,8 @@ internal sealed class Worker : IDisposable
         TelemetryUp = true;
         LastFrame = decoded;
 
-        string raw = JsonSerializer.Serialize(decoded, JsonOpts);
+        // RAW = schema-less decode (field numbers); POLISHED = named decode above.
+        string raw = JsonSerializer.Serialize(RawDecoder.Decode(frame), JsonOpts);
         var envelope = new Dictionary<string, object?>
         {
             ["capturedAt"] = DateTime.UtcNow.ToString("o"),
@@ -149,6 +151,20 @@ internal sealed class Worker : IDisposable
 
     /// <summary>Pull one frame and return just the upload JSON (used by console mode).</summary>
     public async Task<string> BuildJsonAsync(CancellationToken ct) => (await CaptureAsync(ct)).processed;
+
+    /// <summary>Write the latest JSON to the configured file (overwrites). Errors are reported, not thrown.</summary>
+    private void WriteFile(string json)
+    {
+        string p = _cfg.FilePath;
+        if (string.IsNullOrWhiteSpace(p)) return;
+        try
+        {
+            string? dir = Path.GetDirectoryName(p);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            File.WriteAllText(p, json);
+        }
+        catch (Exception e) { LastError = "file: " + e.Message; Log.Write("file", e); }
+    }
 
     private bool EnsureSchema()
     {

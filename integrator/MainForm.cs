@@ -35,6 +35,13 @@ internal sealed class MainForm : Form
     private readonly Label _localStatus = new() { AutoSize = true };
     private readonly Button _localOpen = new() { Text = "Open in browser", Width = 150, Height = 28, Enabled = false };
 
+    // save-to-file destination
+    private readonly CheckBox _fileOn = new() { AutoSize = true };
+    private readonly TextBox _filePath = new() { Width = 320 };
+
+    // always-visible destinations toggle bar (sits above every page)
+    private readonly FlowLayoutPanel _destbar = new() { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, Padding = new Padding(12, 2, 0, 6), Margin = new Padding(0) };
+
     // tabs
     private readonly FlowLayoutPanel _tabbar = new() { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, Padding = new Padding(10, 8, 0, 0), Margin = new Padding(0) };
     private readonly Panel _host = new() { Dock = DockStyle.Fill };
@@ -50,25 +57,29 @@ internal sealed class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
-        ClientSize = new Size(524, 470);
+        ClientSize = new Size(524, 500);
         BackColor = Theme.Bg;
+        if (AppCore.AppIcon is { } appIcon) Icon = appIcon;
 
         _auth.Items.AddRange(new object[] { "None", "Bearer" });
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = Theme.Bg };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, BackColor = Theme.Bg };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var header = Header();
         root.Controls.Add(header, 0, 0);
         root.Controls.Add(_tabbar, 0, 1);
-        root.Controls.Add(_host, 0, 2);
+        root.Controls.Add(BuildDestBar(), 0, 2);
+        root.Controls.Add(_host, 0, 3);
         Controls.Add(root);
 
         AddTab("Status", StatusPage());
         AddTab("Destination", DestinationPage());
         AddTab("Telemetry", TelemetryPage());
         AddTab("Local server", LocalServerPage());
+        AddTab("File", FilePage());
         AddTab("About", AboutPage());
 
         LoadFrom(cfg);
@@ -79,10 +90,16 @@ internal sealed class MainForm : Form
         root.BackColor = Theme.Bg;
         header.BackColor = Theme.Bg;
         _tabbar.BackColor = Theme.Bg;
+        _destbar.BackColor = Theme.Bg;
         _host.BackColor = Theme.Panel;
         Select(_tabs[0].btn.Text);
 
         _auth.SelectedIndexChanged += (_, _) => _token.Enabled = _auth.SelectedIndex == 1;
+
+        // destination enable toggles (live — no restart needed)
+        _send.CheckedChanged += (_, _) => { if (!_loading) _tray.SetSendData(_send.Checked); };
+        _localOn.CheckedChanged += (_, _) => { if (!_loading) { _tray.SetLocal(_localOn.Checked, _localBind.Text.Trim(), ParsePort()); Refresh_(); } };
+        _fileOn.CheckedChanged += (_, _) => { if (!_loading) { _tray.SetFile(_fileOn.Checked, _filePath.Text.Trim()); Refresh_(); } };
 
         _timer.Tick += (_, _) => Refresh_();
         _timer.Start();
@@ -158,7 +175,6 @@ internal sealed class MainForm : Form
         Full(g, _ssl);
         Labeled(g, "Authorization", _auth);
         Labeled(g, "Token", _token);
-        Full(g, _send);
 
         var test = new Button { Text = "Test server + credentials", Width = 200, Height = 28 };
         test.Click += async (_, _) => await OnTest();
@@ -168,8 +184,7 @@ internal sealed class MainForm : Form
         buttons.Controls.Add(save); buttons.Controls.Add(test);
         Full(g, buttons);
         Full(g, _testResult);
-
-        _send.CheckedChanged += (_, _) => { if (!_loading) _tray.SetSendData(_send.Checked); };
+        Full(g, new Label { Text = "POSTs the decoded JSON to the URL above. Toggle sending in the Destinations bar.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
         return g;
     }
 
@@ -183,24 +198,66 @@ internal sealed class MainForm : Form
         data.Click += async (_, _) => await OnShowData();
         Full(g, Spacer(4));
         Full(g, data);
-        Full(g, new Label { Text = "Pulls one frame from the game and shows the raw + processed JSON.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
+        Full(g, new Label { Text = "Pulls one frame and shows it two ways: raw field numbers from gRPC, and the polished JSON with names.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
         return g;
     }
 
     private Control LocalServerPage()
     {
         var g = Page();
-        Full(g, _localOn);
         Labeled(g, "Bind address", _localBind);
         Labeled(g, "Port", _localPort);
         Full(g, Spacer(2));
         Full(g, _localStatus);
         _localOpen.Click += (_, _) => OpenUrl(LocalUrl());
         Full(g, _localOpen);
-        Full(g, new Label { Text = "Serves the latest frame with no auth. Add ?path=a.b.c for one value.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
-
-        _localOn.CheckedChanged += (_, _) => { if (!_loading) { _tray.SetLocal(_localOn.Checked, _localBind.Text.Trim(), ParsePort()); Refresh_(); } };
+        Full(g, new Label { Text = "Serves the latest frame with no auth. Add ?path=a.b.c for one value.\nEnable it in the Destinations bar.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
         return g;
+    }
+
+    private Control FilePage()
+    {
+        var g = Page();
+        _filePath.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        Labeled(g, "File path", _filePath);
+
+        var save = new Button { Text = "Save", Width = 90, Height = 28 };
+        save.Click += (_, _) => _tray.SetFile(_fileOn.Checked, _filePath.Text.Trim());
+        var browse = new Button { Text = "Browse…", Width = 100, Height = 28 };
+        browse.Click += (_, _) => BrowseFile();
+        var buttons = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 8, 0, 4) };
+        buttons.Controls.Add(save); buttons.Controls.Add(browse);
+        Full(g, buttons);
+        Full(g, new Label { Text = "Writes the latest frame (the uploaded JSON) to this file every cycle, overwriting it.\nEnable it in the Destinations bar.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
+        return g;
+    }
+
+    private void BrowseFile()
+    {
+        using var dlg = new SaveFileDialog
+        {
+            Title = "Save telemetry to",
+            Filter = "JSON|*.json|All files|*.*",
+            FileName = _filePath.Text.Trim().Length > 0 ? Path.GetFileName(_filePath.Text.Trim()) : "telemetry.json",
+            OverwritePrompt = false,
+        };
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+        _filePath.Text = dlg.FileName;
+        if (!_loading) _tray.SetFile(_fileOn.Checked, _filePath.Text.Trim());
+    }
+
+    /// <summary>The always-visible "Destinations:" strip with the three enable toggles.</summary>
+    private Control BuildDestBar()
+    {
+        var lbl = new Label { Text = "Destinations:", AutoSize = true, ForeColor = Theme.Muted, Margin = new Padding(0, 4, 10, 0), Tag = "keep" };
+        _send.Text = "Upload"; _send.Margin = new Padding(0, 3, 14, 0);
+        _localOn.Text = "Local server"; _localOn.Margin = new Padding(0, 3, 14, 0);
+        _fileOn.Text = "Save to file"; _fileOn.Margin = new Padding(0, 3, 0, 0);
+        _destbar.Controls.Add(lbl);
+        _destbar.Controls.Add(_send);
+        _destbar.Controls.Add(_localOn);
+        _destbar.Controls.Add(_fileOn);
+        return _destbar;
     }
 
     private Control AboutPage()
@@ -276,6 +333,8 @@ internal sealed class MainForm : Form
         _localOn.Checked = cfg.LocalServerEnabled;
         _localBind.Text = cfg.LocalBind;
         _localPort.Text = cfg.LocalPort.ToString(CultureInfo.InvariantCulture);
+        _fileOn.Checked = cfg.SaveToFile;
+        _filePath.Text = cfg.FilePath;
         _loading = false;
     }
 
@@ -303,6 +362,8 @@ internal sealed class MainForm : Form
             LocalServerEnabled = _localOn.Checked,
             LocalBind = _localBind.Text.Trim().Length > 0 ? _localBind.Text.Trim() : "127.0.0.1",
             LocalPort = ParsePort(),
+            SaveToFile = _fileOn.Checked,
+            FilePath = _filePath.Text.Trim(),
         };
     }
 

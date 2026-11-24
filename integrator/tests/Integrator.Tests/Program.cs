@@ -10,6 +10,7 @@ internal static class Program
     {
         Run("descriptor parse + frame decode", DecodeRoundTrip);
         Run("exe extractor recovers embedded schema", ExtractorFindsSchema);
+        Run("raw decode keeps field numbers", RawDecodeByNumbers);
 
         Console.WriteLine(_failed == 0 ? "\nALL TESTS PASSED" : $"\n{_failed} TEST(S) FAILED");
         return _failed == 0 ? 0 : 1;
@@ -127,6 +128,30 @@ internal static class Program
             Assert(schema.FindMessageEndingWith("TelemetryStreamResponse") != null, "response type not found");
         }
         finally { File.Delete(path); }
+    }
+
+    // Schema-less decode: keys are field numbers, nested messages recurse, strings stay
+    // strings, and repeated fields fold into a list. (The "RAW" view in the UI.)
+    private static void RawDecodeByNumbers()
+    {
+        var v1 = new List<byte>(); Pb.FloatField(v1, 1, 72f);
+        var v2 = new List<byte>(); Pb.FloatField(v2, 1, 80f);
+        var msg = new List<byte>();
+        Pb.FloatField(msg, 1, 36.5f);             // field 1 (I32)
+        Pb.VarintField(msg, 2, 7);                // field 2 (varint)
+        Pb.StringField(msg, 3, "ANVL_Asgard");    // field 3 (string)
+        Pb.LenField(msg, 4, v1.ToArray());        // field 4 (repeated nested message)
+        Pb.LenField(msg, 4, v2.ToArray());
+
+        var raw = RawDecoder.Decode(msg.ToArray());
+
+        Assert(raw.ContainsKey("1") && raw.ContainsKey("2") && raw.ContainsKey("3") && raw.ContainsKey("4"),
+            "keys should be field numbers, not names");
+        Assert(Convert.ToUInt64(raw["2"]) == 7, "varint field wrong");
+        Assert((string)raw["3"]! == "ANVL_Asgard", "string field should round-trip as text");
+        Assert(raw["4"] is List<object?> { Count: 2 }, "repeated field should fold into a list of 2");
+        var nested = (Dictionary<string, object?>)((List<object?>)raw["4"]!)[0]!;
+        Assert(nested.ContainsKey("1"), "nested message should be keyed by field number");
     }
 
     private static void Assert(bool cond, string msg)

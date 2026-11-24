@@ -196,6 +196,7 @@ function page(title, inner) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=1000">
 <title>${esc(title)} · ${esc(config.app.name)}</title>
+<link rel="icon" href="/favicon.ico">
 ${FONTS}
 <style>${STYLE}</style>
 </head><body>${inner}</body></html>`;

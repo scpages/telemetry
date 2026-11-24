@@ -3,6 +3,8 @@
 // Entry point: tiny router over node:http. Zero dependencies.
 
 const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
 const config = require('./config');
 const store = require('./lib/store');
 const session = require('./lib/session');
@@ -12,9 +14,17 @@ const pages = require('./handlers/pages');
 const api = require('./handlers/api');
 
 // [method, pathPattern, handler]. ":name" captures a path segment.
+// Site icon, read once at boot (falls back to empty if the file is missing).
+let FAVICON = Buffer.alloc(0);
+try { FAVICON = fs.readFileSync(path.join(__dirname, 'public', 'favicon.ico')); } catch { /* no icon */ }
+
 const routes = [
   ['GET', '/', pages.landing],
   ['GET', '/health', (_req, res) => sendJson(res, 200, { ok: true })],
+  ['GET', '/favicon.ico', (_req, res) => {
+    res.writeHead(200, { 'content-type': 'image/x-icon', 'cache-control': 'public, max-age=86400' });
+    res.end(FAVICON);
+  }],
 
   ['GET', '/login', auth.login],
   ['GET', '/auth/discord/callback', auth.callback],

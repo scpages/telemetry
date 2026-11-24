@@ -6,7 +6,7 @@ namespace Integrator;
 /// <summary>
 /// The tool's settings. Backed by a simple INI file, editable from the Settings
 /// window or by hand. Keys: interval, url, auth, token, url_ssl_verify, source, exe,
-/// send_data, local_server, local_bind, local_port.
+/// send_data, local_server, local_bind, local_port, file_save, file_path.
 /// </summary>
 internal sealed class AppConfig
 {
@@ -22,6 +22,9 @@ internal sealed class AppConfig
     public bool LocalServerEnabled { get; set; } = false;   // expose latest frame over local HTTP
     public string LocalBind { get; set; } = "127.0.0.1";
     public int LocalPort { get; set; } = 8080;
+
+    public bool SaveToFile { get; set; } = false;           // write the latest frame to a file on disk
+    public string FilePath { get; set; } = "";              // destination file (empty = disabled)
 
     /// <summary>The token actually sent (empty when auth is None).</summary>
     public string EffectiveToken => UseBearer ? Token : "";
@@ -48,6 +51,9 @@ internal sealed class AppConfig
         if (ini.TryGetValue("local_server", out var ls)) cfg.LocalServerEnabled = ParseBool(ls, false);
         if (ini.TryGetValue("local_bind", out var lb) && lb.Trim().Length > 0) cfg.LocalBind = lb.Trim();
         if (ini.TryGetValue("local_port", out var lp) && int.TryParse(lp.Trim(), out var port) && port is > 0 and < 65536) cfg.LocalPort = port;
+
+        if (ini.TryGetValue("file_save", out var fs)) cfg.SaveToFile = ParseBool(fs, false);
+        if (ini.TryGetValue("file_path", out var fp)) cfg.FilePath = fp.Trim();
 
         return cfg;
     }
@@ -84,6 +90,11 @@ internal sealed class AppConfig
         sb.AppendLine($"local_server = {(LocalServerEnabled ? "true" : "false")}");
         sb.AppendLine($"local_bind = {LocalBind}");
         sb.AppendLine($"local_port = {LocalPort}");
+        sb.AppendLine();
+        sb.AppendLine("# Write the latest frame (the uploaded JSON) to a file on disk (true/false).");
+        sb.AppendLine($"file_save = {(SaveToFile ? "true" : "false")}");
+        sb.AppendLine("# Destination file for the above (empty = disabled).");
+        sb.AppendLine($"file_path = {FilePath}");
 
         File.WriteAllText(path, sb.ToString());
     }

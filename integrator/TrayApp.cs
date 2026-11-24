@@ -83,6 +83,13 @@ internal sealed class TrayApp : IDisposable
         ConfigureLocal();
     }
 
+    public void SetFile(bool on, string filePath)
+    {
+        _cfg.SaveToFile = on;
+        _cfg.FilePath = filePath?.Trim() ?? "";
+        SaveCfg();
+    }
+
     private void SaveCfg() { try { _cfg.Save(AppCore.ConfigPath); } catch { } }
 
     private void ShowWindow()
