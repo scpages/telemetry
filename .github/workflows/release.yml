@@ -1,8 +1,9 @@
 name: release
 
-# Build the Integrator as a self-contained Windows binary and publish it to a
-# GitHub Release. Trigger by pushing a version tag (e.g. `git tag v0.4.0` then
-# `git push origin v0.4.0`), or run it by hand from the Actions tab.
+# Build the Integrator (exe) and the Touch Portal plugin (.tpp) as self-contained
+# Windows artifacts and publish them to a GitHub Release. Trigger by pushing a
+# version tag (e.g. `git tag v0.4.0` then `git push origin v0.4.0`), or run it by
+# hand from the Actions tab.
 on:
   push:
     tags:
@@ -40,8 +41,28 @@ jobs:
         shell: pwsh
         run: Copy-Item publish/Integrator.exe SCTelemetry-Integrator.exe
 
-      # Create the release and attach the exe. If a release for this tag already
-      # exists (e.g. it was drafted in the UI first), just upload the asset to it.
+      # Touch Portal plugin: build the exe, then zip entry.tp + exe into a .tpp
+      # (a zip whose single top-level folder is the plugin folder TP expects).
+      - name: Publish plugin exe
+        shell: pwsh
+        run: >
+          dotnet publish TouchPortal/JsonHttpFetcher.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -o tp-publish
+      - name: Package .tpp
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path pkg/JsonHttpFetcher | Out-Null
+          Copy-Item TouchPortal/entry.tp pkg/JsonHttpFetcher/
+          Copy-Item tp-publish/JsonHttpFetcher.exe pkg/JsonHttpFetcher/
+          Compress-Archive -Path pkg/JsonHttpFetcher -DestinationPath JsonHttpFetcher.zip -Force
+          Copy-Item JsonHttpFetcher.zip JsonHttpFetcher.tpp -Force
+
+      # Create the release and attach both assets. If a release for this tag already
+      # exists (e.g. it was drafted in the UI first), just upload the assets to it.
       - name: Create or update GitHub Release
         shell: pwsh
         env:
@@ -49,9 +70,9 @@ jobs:
           TAG: ${{ inputs.tag || github.ref_name }}
           SHA: ${{ github.sha }}
         run: |
-          $notes = "Self-contained Windows build — no .NET install needed. Download **SCTelemetry-Integrator.exe** and run it."
-          gh release create "$env:TAG" SCTelemetry-Integrator.exe --target "$env:SHA" --title "SCTelemetry Integrator $env:TAG" --notes "$notes"
+          $notes = "Self-contained Windows builds — no .NET install needed.`n`n- **SCTelemetry-Integrator.exe** — the Integrator; download and run.`n- **JsonHttpFetcher.tpp** — Touch Portal plugin; import via Settings > Import plug-in."
+          gh release create "$env:TAG" SCTelemetry-Integrator.exe JsonHttpFetcher.tpp --target "$env:SHA" --title "SCTelemetry $env:TAG" --notes "$notes"
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "Release already exists — uploading asset instead."
-            gh release upload "$env:TAG" SCTelemetry-Integrator.exe --clobber
+            Write-Host "Release already exists — uploading assets instead."
+            gh release upload "$env:TAG" SCTelemetry-Integrator.exe JsonHttpFetcher.tpp --clobber
           }

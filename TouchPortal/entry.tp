@@ -1,0 +1,50 @@
+{
+  "api": 10,
+  "version": 12,
+  "name": "JSON Fetcher over HTTP",
+  "id": "jsonhttpfetcher",
+  "plugin_start_cmd": "\"%TP_PLUGIN_FOLDER%JsonHttpFetcher\\JsonHttpFetcher.exe\"",
+  "settings": [
+    {
+      "name": "Endpoint URL",
+      "type": "text",
+      "default": "http://127.0.0.1:8080",
+      "readOnly": false,
+      "tooltip": { "body": "The HTTP URL that returns the JSON." }
+    },
+    {
+      "name": "Refresh Seconds",
+      "type": "number",
+      "default": "3",
+      "minValue": 1,
+      "maxValue": 3600,
+      "readOnly": false,
+      "tooltip": { "body": "How often to poll the endpoint, in seconds (1-3600)." }
+    },
+    {
+      "name": "Values",
+      "type": "multiline",
+      "default": "Balance=actor.state.uec_balance\nHealth=actor.vitals.health.current",
+      "readOnly": false,
+      "tooltip": {
+        "body": "Assign labels which can be used in Touch Portal for specific JSON paths. Assignments can be space or comma separated.\ntouch_portal_label1=path.in.json, touch_portal_label2=different.path.in.json"
+      }
+    },
+    {
+      "name": "Examples & usage",
+      "type": "text",
+      "default": "",
+      "readOnly": true,
+      "tooltip": {
+        "body": "Example JSON:\n{ \"actor\": { \"state\": { \"uec_balance\": 15001986, \"locomotion\": \"ACTOR_LOCOMOTION_STATE_ON_FOOT\" } } }\n\nAssign:\nBalance=actor.state.uec_balance\nSomething=actor.state.locomotion\n\nUse on a page:\nButton > On Event > add \"Dynamic Text Updater\" > set text:\n${value:jsonhttpfetcher.balance} aUEC"
+      }
+    }
+  ],
+  "categories": [
+    {
+      "id": "jsonhttpfetcher.main",
+      "name": "JSON Fetcher",
+      "states": []
+    }
+  ]
+}

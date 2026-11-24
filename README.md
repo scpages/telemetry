@@ -49,6 +49,16 @@ node server.js
 #### Groups
 ![Groups](docs/webapp_groups.png)
 
+## SCTelemetry - Touch Portal plugin
+A small, zero-dependency Touch Portal plugin — **JSON Fetcher over HTTP** — that polls
+an HTTP endpoint (such as the Integrator's built-in server), extracts any values from
+the JSON by path, and exposes each as a live Touch Portal state you can put on a button.
+It is a generic JSON-over-HTTP reader, not Star Citizen specific.
+
+Download `JsonHttpFetcher.tpp` from the [latest release](https://github.com/scpages/telemetry/releases)
+and import it via **Settings → Import plug-in…**. Setup and configuration details are in
+[`TouchPortal/README.md`](TouchPortal/README.md).
+
 ## How to enable telemetry in Star Citizen
 Create new or add content into file, located where you game is installed (not the launcher) ```StarCitizen\<channel>\user.cfg``` this 3 lines:
 ```
