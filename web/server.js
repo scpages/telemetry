@@ -8,6 +8,7 @@ const path = require('node:path');
 const config = require('./config');
 const store = require('./lib/store');
 const session = require('./lib/session');
+const sentry = require('./lib/sentry');
 const { sendJson, redirect } = require('./lib/http');
 const auth = require('./handlers/auth');
 const pages = require('./handlers/pages');
@@ -109,11 +110,29 @@ const server = http.createServer(async (req, res) => {
     await route.handler(req, res, ctx);
   } catch (e) {
     console.error(`${req.method} ${url.pathname}:`, e.message);
+    // Report the failure (no cookies/auth headers — avoid leaking secrets/PII).
+    sentry.captureException(e, {
+      request: { method: req.method, url: url.href, headers: { 'user-agent': req.headers['user-agent'] } },
+      tags: { route: url.pathname },
+    });
     if (!res.writableEnded) sendJson(res, 500, { error: 'internal error' });
   }
+});
+
+// Catch failures outside the request handler so they still reach Sentry.
+process.on('unhandledRejection', (reason) => {
+  console.error('unhandledRejection:', reason);
+  sentry.captureException(reason, { tags: { kind: 'unhandledRejection' } });
+});
+process.on('uncaughtException', (err) => {
+  console.error('uncaughtException:', err);
+  sentry.captureException(err, { tags: { kind: 'uncaughtException' } });
+  // State may be unreliable after this — report, then exit (default Node behaviour).
+  setTimeout(() => process.exit(1), 2000).unref();
 });
 
 server.listen(config.port, config.host, () => {
   console.log(`${config.app.name} web on http://${config.host}:${config.port}  (base ${config.baseUrl})`);
   console.log(`  discord login: ${config.discordConfigured ? 'configured' : 'NOT configured'}${config.allowDevLogin ? ', dev-login ON' : ''}`);
+  console.log(`  sentry: ${sentry.enabled ? `on (${config.sentry.environment})` : 'off'}`);
 });

@@ -34,6 +34,11 @@ const config = {
     clientId: process.env.DISCORD_CLIENT_ID || '',
     clientSecret: process.env.DISCORD_CLIENT_SECRET || '',
   },
+  // Error reporting. Configured only here / via .env — there is no UI for it.
+  sentry: {
+    dsn: process.env.SENTRY_DSN || '',
+    environment: process.env.SENTRY_ENVIRONMENT || 'production',
+  },
   // Dev-only login bypass (no Discord). Never enable in production.
   allowDevLogin: process.env.ALLOW_DEV_LOGIN === '1',
 };
@@ -48,6 +53,7 @@ config.app = {
 config.apiPrefix = '/api/v1';   // versioned API base; legacy /api/* kept as aliases
 config.redirectUri = config.baseUrl + '/auth/discord/callback';
 config.discordConfigured = Boolean(config.discord.clientId && config.discord.clientSecret);
+config.sentryConfigured = Boolean(config.sentry.dsn);
 
 if (!config.sessionSecret) {
   // Ephemeral secret: sessions won't survive a restart, but the app still runs.
