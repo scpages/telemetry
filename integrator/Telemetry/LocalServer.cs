@@ -8,16 +8,19 @@ namespace Integrator.Telemetry;
 /// A tiny no-auth HTTP server that exposes telemetry data and game actions.
 ///
 /// Routes:
-///   GET  /          → latest decoded frame; add ?path=a.b.c for one value (missing → "-")
-///   GET  /actions   → ListTriggerableActions response (requires game running + schema)
-///   POST /action    → TriggerGameAction; body: { "action": "v_deploy_landing_system", "hold_ms": 0 }
-///                     response: { "status": "OK" }
+///   GET  /                    → JSON index of available endpoints
+///   GET  /api/v1/telemetry    → latest decoded frame; add ?path=a.b.c for one value (missing → "-")
+///   GET  /api/v1/actions      → ListTriggerableActions response (requires game running + schema)
+///   POST /api/v1/action       → TriggerGameAction; body: { "action": "v_deploy_landing_system", "hold_ms": 0 }
+///                               response: { "status": "OK" }
 ///
 /// Pure BCL (HttpListener). Bind address and port are configurable.
 /// </summary>
 internal sealed class LocalServer : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
+
+    private const string BasePath = "/api/v1";
 
     private readonly Func<Dictionary<string, object?>?> _frameProvider;
     private readonly Func<CancellationToken, Task<string>>? _actionsProvider;
@@ -81,19 +84,48 @@ internal sealed class LocalServer : IDisposable
         res.ContentType = "application/json; charset=utf-8";
 
         string path = req.Url?.AbsolutePath ?? "/";
+        string method = req.HttpMethod;
 
-        if (path == "/actions" && req.HttpMethod == "GET")
+        if (path == "/" && method == "GET")
+        {
+            HandleIndex(res);
+            return;
+        }
+        if (path == BasePath + "/telemetry" && method == "GET")
+        {
+            HandleTelemetry(req, res);
+            return;
+        }
+        if (path == BasePath + "/actions" && method == "GET")
         {
             HandleActions(res);
             return;
         }
-        if (path == "/action" && req.HttpMethod == "POST")
+        if (path == BasePath + "/action" && method == "POST")
         {
             HandleTrigger(req, res);
             return;
         }
 
-        // default: return latest frame, with optional ?path= extraction
+        Write(res, 404, "{\"error\":\"not found\"}");
+    }
+
+    private static void HandleIndex(HttpListenerResponse res)
+    {
+        var index = new
+        {
+            endpoints = new[]
+            {
+                new { method = "GET",  path = BasePath + "/telemetry", description = "Latest decoded telemetry frame. Add ?path=a.b.c for a single value." },
+                new { method = "GET",  path = BasePath + "/actions",   description = "List all triggerable game actions (requires game running)." },
+                new { method = "POST", path = BasePath + "/action",    description = "Trigger a game action. Body: { \"action\": \"v_deploy_landing_system\", \"hold_ms\": 0 }. Returns: { \"status\": \"OK\" }." },
+            }
+        };
+        Write(res, 200, JsonSerializer.Serialize(index, JsonOpts));
+    }
+
+    private void HandleTelemetry(HttpListenerRequest req, HttpListenerResponse res)
+    {
         Dictionary<string, object?>? frame = _frameProvider();
         string? valuePath = req.QueryString["path"];
         object? payload = frame == null ? null

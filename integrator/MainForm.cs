@@ -211,7 +211,7 @@ internal sealed class MainForm : Form
         Full(g, _localStatus);
         _localOpen.Click += (_, _) => OpenUrl(LocalUrl());
         Full(g, _localOpen);
-        Full(g, new Label { Text = "Serves the latest frame with no auth. Add ?path=a.b.c for one value.\nEnable it in the Destinations bar.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
+        Full(g, new Label { Text = "GET / → endpoint index  ·  GET /api/v1/telemetry → latest frame (?path=a.b.c)\nGET /api/v1/actions → action list  ·  POST /api/v1/action → trigger action\nEnable in the Destinations bar.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
         return g;
     }
 
