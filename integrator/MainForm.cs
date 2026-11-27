@@ -39,6 +39,11 @@ internal sealed class MainForm : Form
     private readonly CheckBox _fileOn = new() { AutoSize = true };
     private readonly TextBox _filePath = new() { Width = 320 };
 
+    // action log
+    private readonly ListBox _actionLog = new() { BorderStyle = BorderStyle.None };
+    private int _actionLogShown;
+    private Worker? _logWorker;
+
     // always-visible destinations toggle bar (sits above every page)
     private readonly FlowLayoutPanel _destbar = new() { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, Padding = new Padding(12, 2, 0, 6), Margin = new Padding(0) };
 
@@ -80,6 +85,7 @@ internal sealed class MainForm : Form
         AddTab("Telemetry", TelemetryPage());
         AddTab("Local server", LocalServerPage());
         AddTab("File", FilePage());
+        AddTab("Actions", ActionsPage());
         AddTab("About", AboutPage());
 
         LoadFrom(cfg);
@@ -260,6 +266,43 @@ internal sealed class MainForm : Form
         return _destbar;
     }
 
+    private Control ActionsPage()
+    {
+        var p = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3,
+            BackColor = Theme.Panel, Padding = new Padding(12, 10, 12, 10),
+        };
+        p.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        p.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        p.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        var hint = new Label
+        {
+            Text = "Actions triggered via POST /api/v1/action on the local server.",
+            AutoSize = true, ForeColor = Theme.Muted, Margin = new Padding(0, 0, 0, 6), Tag = "keep",
+        };
+
+        _actionLog.Dock = DockStyle.Fill;
+        _actionLog.BackColor = Theme.Bg;
+        _actionLog.ForeColor = Theme.Text;
+        _actionLog.Font = new Font("Consolas", 8.5f);
+        _actionLog.Margin = new Padding(0, 0, 0, 6);
+
+        var clear = new Button { Text = "Clear", Width = 80, Height = 28, Margin = new Padding(0) };
+        clear.Click += (_, _) =>
+        {
+            _tray.CurrentWorker?.ClearActionLog();
+            _actionLog.Items.Clear();
+            _actionLogShown = 0;
+        };
+
+        p.Controls.Add(hint, 0, 0);
+        p.Controls.Add(_actionLog, 0, 1);
+        p.Controls.Add(clear, 0, 2);
+        return p;
+    }
+
     private Control AboutPage()
     {
         var g = Page();
@@ -431,7 +474,43 @@ internal sealed class MainForm : Form
         _lastUpload.ForeColor = Theme.Muted;
 
         UpdateLocalStatus();
+        RefreshActionLog();
         _tray.UpdateIcon();
+    }
+
+    private void RefreshActionLog()
+    {
+        Worker? w = _tray.CurrentWorker;
+        if (w != _logWorker)
+        {
+            _actionLog.Items.Clear();
+            _actionLogShown = 0;
+            _logWorker = w;
+        }
+        if (w == null) return;
+
+        var log = w.GetActionLog();
+        if (_actionLogShown >= log.Count) return;
+
+        bool atBottom = _actionLog.Items.Count == 0 ||
+            _actionLog.TopIndex >= _actionLog.Items.Count - (_actionLog.Height / Math.Max(_actionLog.ItemHeight, 1)) - 1;
+
+        for (int i = _actionLogShown; i < log.Count; i++)
+        {
+            var e = log[i];
+            string hold = e.HoldMs > 0 ? $" ({e.HoldMs}ms)" : "";
+            string line = e.Detail != null
+                ? $"{e.Timestamp:HH:mm:ss}  {e.ActionName}{hold}  →  {e.Status}: {e.Detail}"
+                : $"{e.Timestamp:HH:mm:ss}  {e.ActionName}{hold}  →  {e.Status}";
+            _actionLog.Items.Add(line);
+        }
+        _actionLogShown = log.Count;
+
+        if (atBottom)
+        {
+            _actionLog.SelectedIndex = _actionLog.Items.Count - 1;
+            _actionLog.SelectedIndex = -1;
+        }
     }
 
     private void UpdateLocalStatus()

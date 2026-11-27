@@ -23,6 +23,10 @@ internal sealed class Worker : IDisposable
     private string _rootType = "";
     private DateTime _schemaRetryAt = DateTime.MinValue;
 
+    private readonly List<ActionLogEntry> _actionLog = new();
+    private readonly object _logLock = new();
+    private const int LogMaxEntries = 200;
+
     private CancellationTokenSource? _cts;
     private Task? _loop;
 
@@ -210,10 +214,33 @@ internal sealed class Worker : IDisposable
     {
         if (_decoder == null && !EnsureSchema())
             throw new InvalidOperationException(LastError ?? "schema not loaded");
-        byte[] raw = await _game.TriggerActionRawAsync(actionName, holdMs, ct);
-        string typeName = AppCore.TriggerResponseType(_schema!);
-        var decoded = _decoder!.Decode(raw, typeName);
-        return decoded.TryGetValue("status", out var s) ? s?.ToString() ?? "OK" : "OK";
+        try
+        {
+            byte[] raw = await _game.TriggerActionRawAsync(actionName, holdMs, ct);
+            string typeName = AppCore.TriggerResponseType(_schema!);
+            var decoded = _decoder!.Decode(raw, typeName);
+            string status = decoded.TryGetValue("status", out var s) ? s?.ToString() ?? "OK" : "OK";
+            AppendLog(new ActionLogEntry(DateTime.Now, actionName, holdMs, status, null));
+            return status;
+        }
+        catch (Exception e)
+        {
+            AppendLog(new ActionLogEntry(DateTime.Now, actionName, holdMs, "ERROR", Describe(e)));
+            throw;
+        }
+    }
+
+    public IReadOnlyList<ActionLogEntry> GetActionLog() { lock (_logLock) return _actionLog.ToList(); }
+
+    public void ClearActionLog() { lock (_logLock) _actionLog.Clear(); }
+
+    private void AppendLog(ActionLogEntry entry)
+    {
+        lock (_logLock)
+        {
+            if (_actionLog.Count >= LogMaxEntries) _actionLog.RemoveAt(0);
+            _actionLog.Add(entry);
+        }
     }
 
     private static string Describe(Exception e)
