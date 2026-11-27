@@ -39,13 +39,46 @@ Three methods on `sc.game.telemetry.v1.GameTelemetryService`:
 **Trigger actions require** `server.game.telemetry.trigger.actions.enabled = 1` in `user.cfg` + game restart.
 
 **LocalServer routes** (when local server is enabled):
-- `GET /`              → latest decoded frame, optional `?path=a.b.c`
-- `GET /actions`       → `ListTriggerableActions` response as JSON
-- `POST /action`       → `{ "action": "v_deploy_landing_system", "hold_ms": 0 }` → `{ "status": "OK" }`
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/` | JSON index of all available endpoints |
+| GET | `/api/v1/telemetry` | Latest cached decoded frame; `?path=a.b.c` for a single value |
+| POST | `/api/v1/telemetry` | Pull a fresh frame from the game right now; returns the new frame |
+| GET | `/api/v1/actions` | `ListTriggerableActions` response as JSON |
+| POST | `/api/v1/action` | `{ "action": "v_deploy_landing_system", "hold_ms": 0 }` → `{ "status": "OK" }` |
 
 **Status values** from `TriggerGameAction`: `OK`, `FILTERED`, `MAP_INACTIVE`, `FAILED`
 
 **Full action list** (112 actions, Nov 2026 PTU) in `~/git/TheBanjolorian/7hills-link/docs/TELEMETRY.md` §4.
+
+## Event Log (JSON Lines)
+
+When enabled, every telemetry pull and action trigger is appended to a `.jsonl` file — one JSON object per line:
+
+```json
+{"ts":"2026-11-27T14:30:00.123+01:00","source":"interval","status":"OK","res":"{...frame...}"}
+{"ts":"2026-11-27T14:30:05.456+01:00","source":"POST /api/v1/action","req":"{\"action\":\"v_deploy\"}","status":"OK","res":"{\"status\":\"OK\"}"}
+```
+
+**`source` values:**
+
+| source | Trigger |
+|---|---|
+| `interval` | automatic pull from the interval loop |
+| `UI pull` | "Pull now" button in the app |
+| `POST /api/v1/telemetry` | HTTP client called the force-pull endpoint |
+| `POST /api/v1/action` | HTTP client triggered a game action |
+
+**Config keys** (INI file):
+
+| Key | Default | Description |
+|---|---|---|
+| `event_log` | `false` | Enable/disable |
+| `event_log_path` | `%AppData%\SCTelemetry\events.jsonl` | File path (empty = default) |
+| `event_log_max_mb` | `10` | Delete and restart when file exceeds this size |
+
+Configured in the **Log** tab of the UI. The enable toggle is live; path/size require Save.
 
 ## Development Notes
 
