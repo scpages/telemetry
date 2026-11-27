@@ -442,7 +442,7 @@ internal sealed class MainForm : Form
         Worker? w = _tray.CurrentWorker;
         if (w == null) { return; }
         btn.Enabled = false;
-        try { await w.ForcePullAsync(CancellationToken.None); }
+        try { await w.ForcePullAsync(CancellationToken.None, "UI pull"); }
         catch (Exception e) { MessageBox.Show(this, e.Message, "Pull failed", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
         finally { btn.Enabled = true; }
     }
@@ -512,12 +512,12 @@ internal sealed class MainForm : Form
         for (int i = _actionLogShown; i < log.Count; i++)
         {
             var e = log[i];
-            string hold = e.HoldMs > 0 ? $" ({e.HoldMs}ms)" : "";
-            string name = e.Kind == "telemetry" ? "telemetry pull" : e.Name + hold;
-            string line = e.Detail != null
-                ? $"{e.Timestamp:HH:mm:ss}  {name}  →  {e.Status}: {e.Detail}"
-                : $"{e.Timestamp:HH:mm:ss}  {name}  →  {e.Status}";
-            _actionLog.Items.Add(line);
+            var sb = new System.Text.StringBuilder();
+            sb.Append($"{e.Timestamp:HH:mm:ss}  {e.Source}");
+            if (e.RequestBody != null) sb.Append($"  req:{e.RequestBody}");
+            sb.Append($"  →  {e.Status}");
+            if (e.ResponseBody != null) sb.Append($"  res:{e.ResponseBody}");
+            _actionLog.Items.Add(sb.ToString());
         }
         _actionLogShown = log.Count;
 

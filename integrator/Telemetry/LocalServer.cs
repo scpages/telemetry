@@ -25,8 +25,10 @@ internal sealed class LocalServer : IDisposable
 
     private readonly Func<Dictionary<string, object?>?> _frameProvider;
     private readonly Func<CancellationToken, Task<string>>? _actionsProvider;
-    private readonly Func<string, int, CancellationToken, Task<string>>? _triggerAction;
-    private readonly Func<CancellationToken, Task<string>>? _forcePull;
+    // (actionName, holdMs, ct, source, requestBody) → status string
+    private readonly Func<string, int, CancellationToken, string, string?, Task<string>>? _triggerAction;
+    // (source, ct) → processed JSON
+    private readonly Func<string, CancellationToken, Task<string>>? _forcePull;
 
     private HttpListener? _listener;
     private Thread? _thread;
@@ -38,8 +40,8 @@ internal sealed class LocalServer : IDisposable
     public LocalServer(
         Func<Dictionary<string, object?>?> frameProvider,
         Func<CancellationToken, Task<string>>? actionsProvider = null,
-        Func<string, int, CancellationToken, Task<string>>? triggerAction = null,
-        Func<CancellationToken, Task<string>>? forcePull = null)
+        Func<string, int, CancellationToken, string, string?, Task<string>>? triggerAction = null,
+        Func<string, CancellationToken, Task<string>>? forcePull = null)
     {
         _frameProvider = frameProvider;
         _actionsProvider = actionsProvider;
@@ -149,7 +151,7 @@ internal sealed class LocalServer : IDisposable
         if (_forcePull == null) { Write(res, 501, "{\"error\":\"force pull not available\"}"); return; }
         try
         {
-            string json = _forcePull(CancellationToken.None).GetAwaiter().GetResult();
+            string json = _forcePull("POST " + BasePath + "/telemetry", CancellationToken.None).GetAwaiter().GetResult();
             Write(res, 200, json);
         }
         catch (Exception e) { Write(res, 500, JsonSerializer.Serialize(new { error = e.Message })); }
@@ -186,9 +188,10 @@ internal sealed class LocalServer : IDisposable
 
         if (string.IsNullOrEmpty(actionName)) { Write(res, 400, "{\"error\":\"missing \\\"action\\\" field\"}"); return; }
 
+        string source = "POST " + BasePath + "/action";
         try
         {
-            string status = _triggerAction(actionName, holdMs, CancellationToken.None).GetAwaiter().GetResult();
+            string status = _triggerAction(actionName, holdMs, CancellationToken.None, source, body).GetAwaiter().GetResult();
             Write(res, 200, JsonSerializer.Serialize(new { status }));
         }
         catch (Exception e) { Write(res, 500, JsonSerializer.Serialize(new { error = e.Message })); }

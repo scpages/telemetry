@@ -210,7 +210,9 @@ internal sealed class Worker : IDisposable
     /// Call TriggerGameAction and return the status string (OK, FILTERED, MAP_INACTIVE, FAILED).
     /// The game must be running and trigger actions must be enabled in user.cfg.
     /// </summary>
-    public async Task<string> TriggerActionAsync(string actionName, int holdMs, CancellationToken ct)
+    public async Task<string> TriggerActionAsync(
+        string actionName, int holdMs, CancellationToken ct,
+        string source = "UI", string? requestBody = null)
     {
         if (_decoder == null && !EnsureSchema())
             throw new InvalidOperationException(LastError ?? "schema not loaded");
@@ -220,12 +222,12 @@ internal sealed class Worker : IDisposable
             string typeName = AppCore.TriggerResponseType(_schema!);
             var decoded = _decoder!.Decode(raw, typeName);
             string status = decoded.TryGetValue("status", out var s) ? s?.ToString() ?? "OK" : "OK";
-            AppendLog(new LogEntry(DateTime.Now, "action", actionName, holdMs, status, null));
+            AppendLog(new LogEntry(DateTime.Now, source, Trunc(requestBody), status, Trunc("{\"status\":\"" + status + "\"}")));
             return status;
         }
         catch (Exception e)
         {
-            AppendLog(new LogEntry(DateTime.Now, "action", actionName, holdMs, "ERROR", Describe(e)));
+            AppendLog(new LogEntry(DateTime.Now, source, Trunc(requestBody), "ERROR", Trunc(Describe(e))));
             throw;
         }
     }
@@ -234,19 +236,19 @@ internal sealed class Worker : IDisposable
     /// Pull one frame on demand (independent of the interval loop), log it, and return the
     /// processed JSON. Useful for external tools that want a fresh snapshot without polling.
     /// </summary>
-    public async Task<string> ForcePullAsync(CancellationToken ct)
+    public async Task<string> ForcePullAsync(CancellationToken ct, string source = "UI pull")
     {
         if (_decoder == null && !EnsureSchema())
             throw new InvalidOperationException(LastError ?? "schema not loaded");
         try
         {
             var (_, processed) = await CaptureAsync(ct);
-            AppendLog(new LogEntry(DateTime.Now, "telemetry", "pull", 0, "OK", null));
+            AppendLog(new LogEntry(DateTime.Now, source, null, "OK", Trunc(processed)));
             return processed;
         }
         catch (Exception e)
         {
-            AppendLog(new LogEntry(DateTime.Now, "telemetry", "pull", 0, "ERROR", Describe(e)));
+            AppendLog(new LogEntry(DateTime.Now, source, null, "ERROR", Trunc(Describe(e))));
             throw;
         }
     }
@@ -254,6 +256,9 @@ internal sealed class Worker : IDisposable
     public IReadOnlyList<LogEntry> GetActionLog() { lock (_logLock) return _actionLog.ToList(); }
 
     public void ClearActionLog() { lock (_logLock) _actionLog.Clear(); }
+
+    private static string? Trunc(string? s, int max = 200) =>
+        s == null ? null : s.Length <= max ? s : s[..max] + "…";
 
     private void AppendLog(LogEntry entry)
     {
