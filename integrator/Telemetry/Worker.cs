@@ -23,7 +23,7 @@ internal sealed class Worker : IDisposable
     private string _rootType = "";
     private DateTime _schemaRetryAt = DateTime.MinValue;
 
-    private readonly List<ActionLogEntry> _actionLog = new();
+    private readonly List<LogEntry> _actionLog = new();
     private readonly object _logLock = new();
     private const int LogMaxEntries = 200;
 
@@ -220,21 +220,42 @@ internal sealed class Worker : IDisposable
             string typeName = AppCore.TriggerResponseType(_schema!);
             var decoded = _decoder!.Decode(raw, typeName);
             string status = decoded.TryGetValue("status", out var s) ? s?.ToString() ?? "OK" : "OK";
-            AppendLog(new ActionLogEntry(DateTime.Now, actionName, holdMs, status, null));
+            AppendLog(new LogEntry(DateTime.Now, "action", actionName, holdMs, status, null));
             return status;
         }
         catch (Exception e)
         {
-            AppendLog(new ActionLogEntry(DateTime.Now, actionName, holdMs, "ERROR", Describe(e)));
+            AppendLog(new LogEntry(DateTime.Now, "action", actionName, holdMs, "ERROR", Describe(e)));
             throw;
         }
     }
 
-    public IReadOnlyList<ActionLogEntry> GetActionLog() { lock (_logLock) return _actionLog.ToList(); }
+    /// <summary>
+    /// Pull one frame on demand (independent of the interval loop), log it, and return the
+    /// processed JSON. Useful for external tools that want a fresh snapshot without polling.
+    /// </summary>
+    public async Task<string> ForcePullAsync(CancellationToken ct)
+    {
+        if (_decoder == null && !EnsureSchema())
+            throw new InvalidOperationException(LastError ?? "schema not loaded");
+        try
+        {
+            var (_, processed) = await CaptureAsync(ct);
+            AppendLog(new LogEntry(DateTime.Now, "telemetry", "pull", 0, "OK", null));
+            return processed;
+        }
+        catch (Exception e)
+        {
+            AppendLog(new LogEntry(DateTime.Now, "telemetry", "pull", 0, "ERROR", Describe(e)));
+            throw;
+        }
+    }
+
+    public IReadOnlyList<LogEntry> GetActionLog() { lock (_logLock) return _actionLog.ToList(); }
 
     public void ClearActionLog() { lock (_logLock) _actionLog.Clear(); }
 
-    private void AppendLog(ActionLogEntry entry)
+    private void AppendLog(LogEntry entry)
     {
         lock (_logLock)
         {

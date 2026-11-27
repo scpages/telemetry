@@ -85,7 +85,7 @@ internal sealed class MainForm : Form
         AddTab("Telemetry", TelemetryPage());
         AddTab("Local server", LocalServerPage());
         AddTab("File", FilePage());
-        AddTab("Actions", ActionsPage());
+        AddTab("Log", ActionsPage());
         AddTab("About", AboutPage());
 
         LoadFrom(cfg);
@@ -200,11 +200,15 @@ internal sealed class MainForm : Form
         Labeled(g, "Game source", _source);
         Labeled(g, "Interval (s)", _interval);
 
+        var pull = new Button { Text = "Pull now", Width = 120, Height = 30 };
+        pull.Click += async (_, _) => await OnForcePull(pull);
         var data = new Button { Text = "Show latest data", Width = 160, Height = 30 };
         data.Click += async (_, _) => await OnShowData();
+        var buttons = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 8, 0, 4) };
+        buttons.Controls.Add(pull); buttons.Controls.Add(data);
         Full(g, Spacer(4));
-        Full(g, data);
-        Full(g, new Label { Text = "Pulls one frame and shows it two ways: raw field numbers from gRPC, and the polished JSON with names.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
+        Full(g, buttons);
+        Full(g, new Label { Text = "Pull now: fetch a fresh frame immediately (bypasses the interval); logged in the Log tab.\nShow latest data: same pull, displayed in a detail window.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
         return g;
     }
 
@@ -217,7 +221,7 @@ internal sealed class MainForm : Form
         Full(g, _localStatus);
         _localOpen.Click += (_, _) => OpenUrl(LocalUrl());
         Full(g, _localOpen);
-        Full(g, new Label { Text = "GET / → endpoint index  ·  GET /api/v1/telemetry → latest frame (?path=a.b.c)\nGET /api/v1/actions → action list  ·  POST /api/v1/action → trigger action\nEnable in the Destinations bar.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
+        Full(g, new Label { Text = "GET / → endpoint index\nGET /api/v1/telemetry → latest cached frame (?path=a.b.c)  ·  POST → fresh pull\nGET /api/v1/actions → action list  ·  POST /api/v1/action → trigger action\nEnable in the Destinations bar.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
         return g;
     }
 
@@ -279,7 +283,7 @@ internal sealed class MainForm : Form
 
         var hint = new Label
         {
-            Text = "Actions triggered via POST /api/v1/action on the local server.",
+            Text = "Telemetry pulls (pull now / POST /api/v1/telemetry) and action triggers (POST /api/v1/action).",
             AutoSize = true, ForeColor = Theme.Muted, Margin = new Padding(0, 0, 0, 6), Tag = "keep",
         };
 
@@ -433,6 +437,16 @@ internal sealed class MainForm : Form
         catch (Exception e) { _testResult.ForeColor = Theme.Red; _testResult.Text = e.Message; }
     }
 
+    private async Task OnForcePull(Button btn)
+    {
+        Worker? w = _tray.CurrentWorker;
+        if (w == null) { return; }
+        btn.Enabled = false;
+        try { await w.ForcePullAsync(CancellationToken.None); }
+        catch (Exception e) { MessageBox.Show(this, e.Message, "Pull failed", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        finally { btn.Enabled = true; }
+    }
+
     private async Task OnShowData()
     {
         Worker? w = _tray.CurrentWorker;
@@ -499,9 +513,10 @@ internal sealed class MainForm : Form
         {
             var e = log[i];
             string hold = e.HoldMs > 0 ? $" ({e.HoldMs}ms)" : "";
+            string name = e.Kind == "telemetry" ? "telemetry pull" : e.Name + hold;
             string line = e.Detail != null
-                ? $"{e.Timestamp:HH:mm:ss}  {e.ActionName}{hold}  →  {e.Status}: {e.Detail}"
-                : $"{e.Timestamp:HH:mm:ss}  {e.ActionName}{hold}  →  {e.Status}";
+                ? $"{e.Timestamp:HH:mm:ss}  {name}  →  {e.Status}: {e.Detail}"
+                : $"{e.Timestamp:HH:mm:ss}  {name}  →  {e.Status}";
             _actionLog.Items.Add(line);
         }
         _actionLogShown = log.Count;

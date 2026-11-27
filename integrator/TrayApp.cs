@@ -37,6 +37,9 @@ internal sealed class TrayApp : IDisposable
             ct => _worker is { } w ? w.ListActionsJsonAsync(ct) : Task.FromResult("null"),
             (name, holdMs, ct) => _worker is { } w
                 ? w.TriggerActionAsync(name, holdMs, ct)
+                : Task.FromException<string>(new InvalidOperationException("worker not started")),
+            ct => _worker is { } w
+                ? w.ForcePullAsync(ct)
                 : Task.FromException<string>(new InvalidOperationException("worker not started")));
         StartWorker(paused: false);
         ConfigureLocal();

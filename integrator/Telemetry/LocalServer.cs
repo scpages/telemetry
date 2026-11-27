@@ -9,7 +9,8 @@ namespace Integrator.Telemetry;
 ///
 /// Routes:
 ///   GET  /                    → JSON index of available endpoints
-///   GET  /api/v1/telemetry    → latest decoded frame; add ?path=a.b.c for one value (missing → "-")
+///   GET  /api/v1/telemetry    → latest cached frame; add ?path=a.b.c for one value (missing → "-")
+///   POST /api/v1/telemetry    → pull a fresh frame from the game right now; returns the new frame
 ///   GET  /api/v1/actions      → ListTriggerableActions response (requires game running + schema)
 ///   POST /api/v1/action       → TriggerGameAction; body: { "action": "v_deploy_landing_system", "hold_ms": 0 }
 ///                               response: { "status": "OK" }
@@ -25,6 +26,7 @@ internal sealed class LocalServer : IDisposable
     private readonly Func<Dictionary<string, object?>?> _frameProvider;
     private readonly Func<CancellationToken, Task<string>>? _actionsProvider;
     private readonly Func<string, int, CancellationToken, Task<string>>? _triggerAction;
+    private readonly Func<CancellationToken, Task<string>>? _forcePull;
 
     private HttpListener? _listener;
     private Thread? _thread;
@@ -36,11 +38,13 @@ internal sealed class LocalServer : IDisposable
     public LocalServer(
         Func<Dictionary<string, object?>?> frameProvider,
         Func<CancellationToken, Task<string>>? actionsProvider = null,
-        Func<string, int, CancellationToken, Task<string>>? triggerAction = null)
+        Func<string, int, CancellationToken, Task<string>>? triggerAction = null,
+        Func<CancellationToken, Task<string>>? forcePull = null)
     {
         _frameProvider = frameProvider;
         _actionsProvider = actionsProvider;
         _triggerAction = triggerAction;
+        _forcePull = forcePull;
     }
 
     public void Start(string bind, int port)
@@ -96,6 +100,11 @@ internal sealed class LocalServer : IDisposable
             HandleTelemetry(req, res);
             return;
         }
+        if (path == BasePath + "/telemetry" && method == "POST")
+        {
+            HandleForcePull(res);
+            return;
+        }
         if (path == BasePath + "/actions" && method == "GET")
         {
             HandleActions(res);
@@ -116,7 +125,8 @@ internal sealed class LocalServer : IDisposable
         {
             endpoints = new[]
             {
-                new { method = "GET",  path = BasePath + "/telemetry", description = "Latest decoded telemetry frame. Add ?path=a.b.c for a single value." },
+                new { method = "GET",  path = BasePath + "/telemetry", description = "Latest cached telemetry frame. Add ?path=a.b.c for a single value." },
+                new { method = "POST", path = BasePath + "/telemetry", description = "Pull a fresh frame from the game right now; returns the new frame." },
                 new { method = "GET",  path = BasePath + "/actions",   description = "List all triggerable game actions (requires game running)." },
                 new { method = "POST", path = BasePath + "/action",    description = "Trigger a game action. Body: { \"action\": \"v_deploy_landing_system\", \"hold_ms\": 0 }. Returns: { \"status\": \"OK\" }." },
             }
@@ -132,6 +142,17 @@ internal sealed class LocalServer : IDisposable
             : string.IsNullOrEmpty(valuePath) ? frame
             : JsonPath.Get(frame, valuePath);
         Write(res, 200, JsonSerializer.Serialize(payload, JsonOpts));
+    }
+
+    private void HandleForcePull(HttpListenerResponse res)
+    {
+        if (_forcePull == null) { Write(res, 501, "{\"error\":\"force pull not available\"}"); return; }
+        try
+        {
+            string json = _forcePull(CancellationToken.None).GetAwaiter().GetResult();
+            Write(res, 200, json);
+        }
+        catch (Exception e) { Write(res, 500, JsonSerializer.Serialize(new { error = e.Message })); }
     }
 
     private void HandleActions(HttpListenerResponse res)
