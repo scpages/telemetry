@@ -26,6 +26,27 @@ docs/         — screenshots
 - Web live at: `sctelemetry.dodoslav.eu` (reverse-proxied from AS2 `127.0.0.4:8080`)
 - Schema extraction ported from 7hills-link's approach; cache in `%LOCALAPPDATA%\ScTelemetry`
 
+## gRPC API — read + write
+
+Three methods on `sc.game.telemetry.v1.GameTelemetryService`:
+
+| Method | Kind | Implemented |
+|---|---|---|
+| `TelemetryStream` | server-streaming | yes — `GameClient.PullFrameAsync` |
+| `ListTriggerableActions` | unary | yes — `GameClient.ListActionsRawAsync` → `Worker.ListActionsJsonAsync` |
+| `TriggerGameAction` | unary | yes — `GameClient.TriggerActionRawAsync` → `Worker.TriggerActionAsync` |
+
+**Trigger actions require** `server.game.telemetry.trigger.actions.enabled = 1` in `user.cfg` + game restart.
+
+**LocalServer routes** (when local server is enabled):
+- `GET /`              → latest decoded frame, optional `?path=a.b.c`
+- `GET /actions`       → `ListTriggerableActions` response as JSON
+- `POST /action`       → `{ "action": "v_deploy_landing_system", "hold_ms": 0 }` → `{ "status": "OK" }`
+
+**Status values** from `TriggerGameAction`: `OK`, `FILTERED`, `MAP_INACTIVE`, `FAILED`
+
+**Full action list** (112 actions, Nov 2026 PTU) in `~/git/TheBanjolorian/7hills-link/docs/TELEMETRY.md` §4.
+
 ## Development Notes
 
 - Integrator can be compile-checked on Linux (`~/.dotnet`, net9.0-windows + `EnableWindowsTargeting`)
