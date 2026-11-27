@@ -19,6 +19,7 @@ internal sealed class Worker : IDisposable
     private readonly Uploader _uploader;
 
     private FrameDecoder? _decoder;
+    private Schema? _schema;
     private string _rootType = "";
     private DateTime _schemaRetryAt = DateTime.MinValue;
 
@@ -173,6 +174,7 @@ internal sealed class Worker : IDisposable
         try
         {
             Schema schema = AppCore.LoadSchema(_cfg);
+            _schema = schema;
             _decoder = new FrameDecoder(schema);
             _rootType = AppCore.RootType(schema);
             return true;
@@ -184,6 +186,34 @@ internal sealed class Worker : IDisposable
             _schemaRetryAt = DateTime.UtcNow + SchemaRetry;
             return false;
         }
+    }
+
+    /// <summary>
+    /// Call ListTriggerableActions and return the decoded response as a JSON string.
+    /// The game must be running. Requires schema (same as PullFrameAsync).
+    /// </summary>
+    public async Task<string> ListActionsJsonAsync(CancellationToken ct)
+    {
+        if (_decoder == null && !EnsureSchema())
+            throw new InvalidOperationException(LastError ?? "schema not loaded");
+        byte[] raw = await _game.ListActionsRawAsync(ct);
+        string typeName = AppCore.ListActionsResponseType(_schema!);
+        var decoded = _decoder!.Decode(raw, typeName);
+        return JsonSerializer.Serialize(decoded, JsonOpts);
+    }
+
+    /// <summary>
+    /// Call TriggerGameAction and return the status string (OK, FILTERED, MAP_INACTIVE, FAILED).
+    /// The game must be running and trigger actions must be enabled in user.cfg.
+    /// </summary>
+    public async Task<string> TriggerActionAsync(string actionName, int holdMs, CancellationToken ct)
+    {
+        if (_decoder == null && !EnsureSchema())
+            throw new InvalidOperationException(LastError ?? "schema not loaded");
+        byte[] raw = await _game.TriggerActionRawAsync(actionName, holdMs, ct);
+        string typeName = AppCore.TriggerResponseType(_schema!);
+        var decoded = _decoder!.Decode(raw, typeName);
+        return decoded.TryGetValue("status", out var s) ? s?.ToString() ?? "OK" : "OK";
     }
 
     private static string Describe(Exception e)

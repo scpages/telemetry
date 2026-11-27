@@ -67,4 +67,12 @@ internal static class AppCore
     public static string RootType(Schema schema) =>
         schema.FindMessageEndingWith("TelemetryStreamResponse")
         ?? ".sc.game.telemetry.v1.TelemetryStreamResponse";
+
+    public static string ListActionsResponseType(Schema schema) =>
+        schema.FindMessageEndingWith("ListTriggerableActionsResponse")
+        ?? ".sc.game.telemetry.v1.ListTriggerableActionsResponse";
+
+    public static string TriggerResponseType(Schema schema) =>
+        schema.FindMessageEndingWith("TriggerGameActionResponse")
+        ?? ".sc.game.telemetry.v1.TriggerGameActionResponse";
 }
