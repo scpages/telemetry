@@ -19,8 +19,10 @@ internal sealed class Worker : IDisposable
     private readonly Uploader _uploader;
 
     private FrameDecoder? _decoder;
+    private Schema? _schema;
     private string _rootType = "";
     private DateTime _schemaRetryAt = DateTime.MinValue;
+
 
     private CancellationTokenSource? _cts;
     private Task? _loop;
@@ -89,6 +91,7 @@ internal sealed class Worker : IDisposable
                 else
                 {
                     var (_, processed) = await CaptureAsync(ct);   // sets TelemetryUp + LastFrame
+                    AppendLog(new LogEntry(DateTime.Now, "interval", null, "OK", processed));
                     if (_cfg.SaveToFile) WriteFile(processed);
                     if (_cfg.SendData)
                     {
@@ -109,9 +112,9 @@ internal sealed class Worker : IDisposable
             catch (Exception e)
             {
                 LastError = Describe(e);
-                // distinguish a game-side failure from an upload-side one for the indicators
                 if (e is IOException || (e is HttpRequestException && _lastStage == Stage.Pull)) TelemetryUp = false;
                 else UploadUp = false;
+                AppendLog(new LogEntry(DateTime.Now, "interval", null, "ERROR", Describe(e)));
             }
 
             try { await Task.Delay(wait, ct); }
@@ -173,6 +176,7 @@ internal sealed class Worker : IDisposable
         try
         {
             Schema schema = AppCore.LoadSchema(_cfg);
+            _schema = schema;
             _decoder = new FrameDecoder(schema);
             _rootType = AppCore.RootType(schema);
             return true;
@@ -184,6 +188,93 @@ internal sealed class Worker : IDisposable
             _schemaRetryAt = DateTime.UtcNow + SchemaRetry;
             return false;
         }
+    }
+
+    /// <summary>
+    /// Call ListTriggerableActions and return the decoded response as a JSON string.
+    /// The game must be running. Requires schema (same as PullFrameAsync).
+    /// </summary>
+    public async Task<string> ListActionsJsonAsync(CancellationToken ct)
+    {
+        if (_decoder == null && !EnsureSchema())
+            throw new InvalidOperationException(LastError ?? "schema not loaded");
+        byte[] raw = await _game.ListActionsRawAsync(ct);
+        string typeName = AppCore.ListActionsResponseType(_schema!);
+        var decoded = _decoder!.Decode(raw, typeName);
+        return JsonSerializer.Serialize(decoded, JsonOpts);
+    }
+
+    /// <summary>
+    /// Call TriggerGameAction and return the status string (OK, FILTERED, MAP_INACTIVE, FAILED).
+    /// The game must be running and trigger actions must be enabled in user.cfg.
+    /// </summary>
+    public async Task<string> TriggerActionAsync(
+        string actionName, int holdMs, CancellationToken ct,
+        string source = "UI", string? requestBody = null)
+    {
+        if (_decoder == null && !EnsureSchema())
+            throw new InvalidOperationException(LastError ?? "schema not loaded");
+        try
+        {
+            byte[] raw = await _game.TriggerActionRawAsync(actionName, holdMs, ct);
+            string typeName = AppCore.TriggerResponseType(_schema!);
+            var decoded = _decoder!.Decode(raw, typeName);
+            string status = decoded.TryGetValue("status", out var s) ? s?.ToString() ?? "OK" : "OK";
+            AppendLog(new LogEntry(DateTime.Now, source, requestBody, status, "{\"status\":\"" + status + "\"}"));
+            return status;
+        }
+        catch (Exception e)
+        {
+            AppendLog(new LogEntry(DateTime.Now, source, requestBody, "ERROR", Describe(e)));
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Pull one frame on demand (independent of the interval loop), log it, and return the
+    /// processed JSON. Useful for external tools that want a fresh snapshot without polling.
+    /// </summary>
+    public async Task<string> ForcePullAsync(CancellationToken ct, string source = "UI pull")
+    {
+        if (_decoder == null && !EnsureSchema())
+            throw new InvalidOperationException(LastError ?? "schema not loaded");
+        try
+        {
+            var (_, processed) = await CaptureAsync(ct);
+            AppendLog(new LogEntry(DateTime.Now, source, null, "OK", processed));
+            return processed;
+        }
+        catch (Exception e)
+        {
+            AppendLog(new LogEntry(DateTime.Now, source, null, "ERROR", Describe(e)));
+            throw;
+        }
+    }
+
+    private void AppendLog(LogEntry entry)
+    {
+        if (!_cfg.EventLogEnabled) return;
+        try
+        {
+            string path = _cfg.EffectiveLogPath;
+            string? dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+            if (File.Exists(path) && new FileInfo(path).Length > _cfg.EventLogMaxMb * 1024L * 1024L)
+                File.Delete(path);
+
+            File.AppendAllText(path, BuildLogLine(entry) + "\n");
+        }
+        catch { }
+    }
+
+    private static string BuildLogLine(LogEntry e)
+    {
+        var d = new Dictionary<string, string?> { ["ts"] = e.Timestamp.ToString("o"), ["source"] = e.Source };
+        if (e.RequestBody != null) d["req"] = e.RequestBody;
+        d["status"] = e.Status;
+        if (e.ResponseBody != null) d["res"] = e.ResponseBody;
+        return JsonSerializer.Serialize(d);
     }
 
     private static string Describe(Exception e)

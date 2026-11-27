@@ -32,7 +32,15 @@ internal sealed class TrayApp : IDisposable
         _tray = new NotifyIcon { Text = "SCTelemetry Integrator", Visible = true, ContextMenuStrip = menu };
         _tray.DoubleClick += (_, _) => ShowWindow();
 
-        _local = new LocalServer(() => _worker?.LastFrame);
+        _local = new LocalServer(
+            () => _worker?.LastFrame,
+            ct => _worker is { } w ? w.ListActionsJsonAsync(ct) : Task.FromResult("null"),
+            (name, holdMs, ct, source, body) => _worker is { } w
+                ? w.TriggerActionAsync(name, holdMs, ct, source, body)
+                : Task.FromException<string>(new InvalidOperationException("worker not started")),
+            (source, ct) => _worker is { } w
+                ? w.ForcePullAsync(ct, source)
+                : Task.FromException<string>(new InvalidOperationException("worker not started")));
         StartWorker(paused: false);
         ConfigureLocal();
         UpdateIcon();
@@ -87,6 +95,14 @@ internal sealed class TrayApp : IDisposable
     {
         _cfg.SaveToFile = on;
         _cfg.FilePath = filePath?.Trim() ?? "";
+        SaveCfg();
+    }
+
+    public void SetEventLog(bool on, string path, int maxMb)
+    {
+        _cfg.EventLogEnabled = on;
+        _cfg.EventLogPath = path?.Trim() ?? "";
+        _cfg.EventLogMaxMb = maxMb > 0 ? maxMb : 10;
         SaveCfg();
     }
 

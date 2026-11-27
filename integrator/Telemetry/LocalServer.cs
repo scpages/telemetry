@@ -5,15 +5,31 @@ using System.Text.Json;
 namespace Integrator.Telemetry;
 
 /// <summary>
-/// A tiny no-auth HTTP server that exposes the latest decoded frame as JSON.
-/// GET any path → the latest frame; add <c>?path=a.b.c</c> for a single value
-/// (missing → "-"). Pure BCL (HttpListener). Bind address and port are configurable.
+/// A tiny no-auth HTTP server that exposes telemetry data and game actions.
+///
+/// Routes:
+///   GET  /                    → JSON index of available endpoints
+///   GET  /api/v1/telemetry    → latest cached frame; add ?path=a.b.c for one value (missing → "-")
+///   POST /api/v1/telemetry    → pull a fresh frame from the game right now; returns the new frame
+///   GET  /api/v1/actions      → ListTriggerableActions response (requires game running + schema)
+///   POST /api/v1/action       → TriggerGameAction; body: { "action": "v_deploy_landing_system", "hold_ms": 0 }
+///                               response: { "status": "OK" }
+///
+/// Pure BCL (HttpListener). Bind address and port are configurable.
 /// </summary>
 internal sealed class LocalServer : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
 
-    private readonly Func<Dictionary<string, object?>?> _provider;
+    private const string BasePath = "/api/v1";
+
+    private readonly Func<Dictionary<string, object?>?> _frameProvider;
+    private readonly Func<CancellationToken, Task<string>>? _actionsProvider;
+    // (actionName, holdMs, ct, source, requestBody) → status string
+    private readonly Func<string, int, CancellationToken, string, string?, Task<string>>? _triggerAction;
+    // (source, ct) → processed JSON
+    private readonly Func<string, CancellationToken, Task<string>>? _forcePull;
+
     private HttpListener? _listener;
     private Thread? _thread;
 
@@ -21,7 +37,17 @@ internal sealed class LocalServer : IDisposable
     public string Prefix { get; private set; } = "";
     public bool Running => _listener?.IsListening == true;
 
-    public LocalServer(Func<Dictionary<string, object?>?> provider) => _provider = provider;
+    public LocalServer(
+        Func<Dictionary<string, object?>?> frameProvider,
+        Func<CancellationToken, Task<string>>? actionsProvider = null,
+        Func<string, int, CancellationToken, string, string?, Task<string>>? triggerAction = null,
+        Func<string, CancellationToken, Task<string>>? forcePull = null)
+    {
+        _frameProvider = frameProvider;
+        _actionsProvider = actionsProvider;
+        _triggerAction = triggerAction;
+        _forcePull = forcePull;
+    }
 
     public void Start(string bind, int port)
     {
@@ -58,18 +84,123 @@ internal sealed class LocalServer : IDisposable
 
     private void Handle(HttpListenerContext ctx)
     {
+        var req = ctx.Request;
         var res = ctx.Response;
         res.AddHeader("Access-Control-Allow-Origin", "*");
         res.ContentType = "application/json; charset=utf-8";
 
-        Dictionary<string, object?>? frame = _provider();
-        string? path = ctx.Request.QueryString["path"];
-        object? payload = frame == null ? null
-            : string.IsNullOrEmpty(path) ? frame
-            : JsonPath.Get(frame, path);
+        string path = req.Url?.AbsolutePath ?? "/";
+        string method = req.HttpMethod;
 
-        byte[] bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(payload, JsonOpts));
-        res.StatusCode = 200;
+        if (path == "/" && method == "GET")
+        {
+            HandleIndex(res);
+            return;
+        }
+        if (path == BasePath + "/telemetry" && method == "GET")
+        {
+            HandleTelemetry(req, res);
+            return;
+        }
+        if (path == BasePath + "/telemetry" && method == "POST")
+        {
+            HandleForcePull(res);
+            return;
+        }
+        if (path == BasePath + "/actions" && method == "GET")
+        {
+            HandleActions(res);
+            return;
+        }
+        if (path == BasePath + "/action" && method == "POST")
+        {
+            HandleTrigger(req, res);
+            return;
+        }
+
+        Write(res, 404, "{\"error\":\"not found\"}");
+    }
+
+    private static void HandleIndex(HttpListenerResponse res)
+    {
+        var index = new
+        {
+            endpoints = new[]
+            {
+                new { method = "GET",  path = BasePath + "/telemetry", description = "Latest cached telemetry frame. Add ?path=a.b.c for a single value." },
+                new { method = "POST", path = BasePath + "/telemetry", description = "Pull a fresh frame from the game right now; returns the new frame." },
+                new { method = "GET",  path = BasePath + "/actions",   description = "List all triggerable game actions (requires game running)." },
+                new { method = "POST", path = BasePath + "/action",    description = "Trigger a game action. Body: { \"action\": \"v_deploy_landing_system\", \"hold_ms\": 0 }. Returns: { \"status\": \"OK\" }." },
+            }
+        };
+        Write(res, 200, JsonSerializer.Serialize(index, JsonOpts));
+    }
+
+    private void HandleTelemetry(HttpListenerRequest req, HttpListenerResponse res)
+    {
+        Dictionary<string, object?>? frame = _frameProvider();
+        string? valuePath = req.QueryString["path"];
+        object? payload = frame == null ? null
+            : string.IsNullOrEmpty(valuePath) ? frame
+            : JsonPath.Get(frame, valuePath);
+        Write(res, 200, JsonSerializer.Serialize(payload, JsonOpts));
+    }
+
+    private void HandleForcePull(HttpListenerResponse res)
+    {
+        if (_forcePull == null) { Write(res, 501, "{\"error\":\"force pull not available\"}"); return; }
+        try
+        {
+            string json = _forcePull("POST " + BasePath + "/telemetry", CancellationToken.None).GetAwaiter().GetResult();
+            Write(res, 200, json);
+        }
+        catch (Exception e) { Write(res, 500, JsonSerializer.Serialize(new { error = e.Message })); }
+    }
+
+    private void HandleActions(HttpListenerResponse res)
+    {
+        if (_actionsProvider == null) { Write(res, 501, "{\"error\":\"actions not available\"}"); return; }
+        try
+        {
+            string json = _actionsProvider(CancellationToken.None).GetAwaiter().GetResult();
+            Write(res, 200, json);
+        }
+        catch (Exception e) { Write(res, 500, JsonSerializer.Serialize(new { error = e.Message })); }
+    }
+
+    private void HandleTrigger(HttpListenerRequest req, HttpListenerResponse res)
+    {
+        if (_triggerAction == null) { Write(res, 501, "{\"error\":\"trigger not available\"}"); return; }
+
+        string body;
+        using (var reader = new StreamReader(req.InputStream, Encoding.UTF8))
+            body = reader.ReadToEnd();
+
+        string? actionName = null;
+        int holdMs = 0;
+        try
+        {
+            var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+            if (doc.RootElement.TryGetProperty("action", out var a)) actionName = a.GetString();
+            if (doc.RootElement.TryGetProperty("hold_ms", out var h)) holdMs = h.GetInt32();
+        }
+        catch { }
+
+        if (string.IsNullOrEmpty(actionName)) { Write(res, 400, "{\"error\":\"missing \\\"action\\\" field\"}"); return; }
+
+        string source = "POST " + BasePath + "/action";
+        try
+        {
+            string status = _triggerAction(actionName, holdMs, CancellationToken.None, source, body).GetAwaiter().GetResult();
+            Write(res, 200, JsonSerializer.Serialize(new { status }));
+        }
+        catch (Exception e) { Write(res, 500, JsonSerializer.Serialize(new { error = e.Message })); }
+    }
+
+    private static void Write(HttpListenerResponse res, int statusCode, string json)
+    {
+        byte[] bytes = Encoding.UTF8.GetBytes(json);
+        res.StatusCode = statusCode;
         res.ContentLength64 = bytes.Length;
         res.OutputStream.Write(bytes, 0, bytes.Length);
         res.OutputStream.Close();

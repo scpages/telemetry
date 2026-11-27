@@ -39,6 +39,11 @@ internal sealed class MainForm : Form
     private readonly CheckBox _fileOn = new() { AutoSize = true };
     private readonly TextBox _filePath = new() { Width = 320 };
 
+    // event log settings
+    private readonly CheckBox _logOn = new() { AutoSize = true };
+    private readonly TextBox _logPath = new() { Width = 320 };
+    private readonly TextBox _logMaxMb = new() { Width = 60 };
+
     // always-visible destinations toggle bar (sits above every page)
     private readonly FlowLayoutPanel _destbar = new() { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, Padding = new Padding(12, 2, 0, 6), Margin = new Padding(0) };
 
@@ -80,6 +85,7 @@ internal sealed class MainForm : Form
         AddTab("Telemetry", TelemetryPage());
         AddTab("Local server", LocalServerPage());
         AddTab("File", FilePage());
+        AddTab("Log", LogPage());
         AddTab("About", AboutPage());
 
         LoadFrom(cfg);
@@ -100,6 +106,7 @@ internal sealed class MainForm : Form
         _send.CheckedChanged += (_, _) => { if (!_loading) _tray.SetSendData(_send.Checked); };
         _localOn.CheckedChanged += (_, _) => { if (!_loading) { _tray.SetLocal(_localOn.Checked, _localBind.Text.Trim(), ParsePort()); Refresh_(); } };
         _fileOn.CheckedChanged += (_, _) => { if (!_loading) { _tray.SetFile(_fileOn.Checked, _filePath.Text.Trim()); Refresh_(); } };
+        _logOn.CheckedChanged += (_, _) => { if (!_loading) SaveLog(); };
 
         _timer.Tick += (_, _) => Refresh_();
         _timer.Start();
@@ -194,11 +201,15 @@ internal sealed class MainForm : Form
         Labeled(g, "Game source", _source);
         Labeled(g, "Interval (s)", _interval);
 
+        var pull = new Button { Text = "Pull now", Width = 120, Height = 30 };
+        pull.Click += async (_, _) => await OnForcePull(pull);
         var data = new Button { Text = "Show latest data", Width = 160, Height = 30 };
         data.Click += async (_, _) => await OnShowData();
+        var buttons = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 8, 0, 4) };
+        buttons.Controls.Add(pull); buttons.Controls.Add(data);
         Full(g, Spacer(4));
-        Full(g, data);
-        Full(g, new Label { Text = "Pulls one frame and shows it two ways: raw field numbers from gRPC, and the polished JSON with names.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
+        Full(g, buttons);
+        Full(g, new Label { Text = "Pull now: fetch a fresh frame immediately (bypasses the interval).\nShow latest data: same pull, displayed in a detail window.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
         return g;
     }
 
@@ -211,7 +222,7 @@ internal sealed class MainForm : Form
         Full(g, _localStatus);
         _localOpen.Click += (_, _) => OpenUrl(LocalUrl());
         Full(g, _localOpen);
-        Full(g, new Label { Text = "Serves the latest frame with no auth. Add ?path=a.b.c for one value.\nEnable it in the Destinations bar.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
+        Full(g, new Label { Text = "GET / → endpoint index\nGET /api/v1/telemetry → latest cached frame (?path=a.b.c)  ·  POST → fresh pull\nGET /api/v1/actions → action list  ·  POST /api/v1/action → trigger action\nEnable in the Destinations bar.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
         return g;
     }
 
@@ -258,6 +269,50 @@ internal sealed class MainForm : Form
         _destbar.Controls.Add(_localOn);
         _destbar.Controls.Add(_fileOn);
         return _destbar;
+    }
+
+    private Control LogPage()
+    {
+        var g = Page();
+        _logOn.Text = "Enable event log";
+        Full(g, _logOn);
+        _logPath.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        Labeled(g, "Log file path", _logPath);
+        Labeled(g, "Max size (MB)", _logMaxMb);
+
+        var save = new Button { Text = "Save", Width = 90, Height = 28 };
+        save.Click += (_, _) => SaveLog();
+        var browse = new Button { Text = "Browse…", Width = 100, Height = 28 };
+        browse.Click += (_, _) => BrowseLog();
+        var buttons = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 8, 0, 4) };
+        buttons.Controls.Add(save); buttons.Controls.Add(browse);
+        Full(g, buttons);
+        Full(g, new Label
+        {
+            Text = "Events are written as JSON Lines (one object per line, .jsonl).\nOne entry per telemetry pull and per action trigger.\nLeave path empty to use %AppData%\\SCTelemetry\\events.jsonl.\nWhen the file exceeds the size limit it is deleted and a new file starts.",
+            AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep",
+        });
+        return g;
+    }
+
+    private void SaveLog()
+    {
+        int maxMb = int.TryParse(_logMaxMb.Text.Trim(), out var m) && m > 0 ? m : 10;
+        _tray.SetEventLog(_logOn.Checked, _logPath.Text.Trim(), maxMb);
+    }
+
+    private void BrowseLog()
+    {
+        using var dlg = new SaveFileDialog
+        {
+            Title = "Event log file",
+            Filter = "JSON Lines|*.jsonl|All files|*.*",
+            FileName = _logPath.Text.Trim().Length > 0 ? Path.GetFileName(_logPath.Text.Trim()) : "events.jsonl",
+            OverwritePrompt = false,
+        };
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+        _logPath.Text = dlg.FileName;
+        SaveLog();
     }
 
     private Control AboutPage()
@@ -335,6 +390,9 @@ internal sealed class MainForm : Form
         _localPort.Text = cfg.LocalPort.ToString(CultureInfo.InvariantCulture);
         _fileOn.Checked = cfg.SaveToFile;
         _filePath.Text = cfg.FilePath;
+        _logOn.Checked = cfg.EventLogEnabled;
+        _logPath.Text = cfg.EventLogPath;
+        _logMaxMb.Text = cfg.EventLogMaxMb.ToString(CultureInfo.InvariantCulture);
         _loading = false;
     }
 
@@ -364,6 +422,9 @@ internal sealed class MainForm : Form
             LocalPort = ParsePort(),
             SaveToFile = _fileOn.Checked,
             FilePath = _filePath.Text.Trim(),
+            EventLogEnabled = _logOn.Checked,
+            EventLogPath = _logPath.Text.Trim(),
+            EventLogMaxMb = int.TryParse(_logMaxMb.Text.Trim(), out var logMb) && logMb > 0 ? logMb : 10,
         };
     }
 
@@ -388,6 +449,16 @@ internal sealed class MainForm : Form
             _testResult.Text = $"Server {r.Server}\n{creds}";
         }
         catch (Exception e) { _testResult.ForeColor = Theme.Red; _testResult.Text = e.Message; }
+    }
+
+    private async Task OnForcePull(Button btn)
+    {
+        Worker? w = _tray.CurrentWorker;
+        if (w == null) { return; }
+        btn.Enabled = false;
+        try { await w.ForcePullAsync(CancellationToken.None, "UI pull"); }
+        catch (Exception e) { MessageBox.Show(this, e.Message, "Pull failed", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        finally { btn.Enabled = true; }
     }
 
     private async Task OnShowData()
