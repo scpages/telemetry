@@ -260,11 +260,7 @@ internal sealed class Worker : IDisposable
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
             if (File.Exists(path) && new FileInfo(path).Length > _cfg.EventLogMaxMb * 1024L * 1024L)
-            {
-                string bak = path + ".1";
-                if (File.Exists(bak)) File.Delete(bak);
-                File.Move(path, bak);
-            }
+                File.Delete(path);
 
             File.AppendAllText(path, BuildLogLine(entry) + "\n");
         }

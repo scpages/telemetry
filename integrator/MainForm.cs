@@ -289,7 +289,7 @@ internal sealed class MainForm : Form
         Full(g, buttons);
         Full(g, new Label
         {
-            Text = "Events are written as JSON Lines (one object per line, .jsonl).\nOne entry per telemetry pull and per action trigger.\nLeave path empty to use %AppData%\\SCTelemetry\\events.jsonl.\nWhen the file exceeds the size limit it is renamed to events.jsonl.1 and a new file starts.",
+            Text = "Events are written as JSON Lines (one object per line, .jsonl).\nOne entry per telemetry pull and per action trigger.\nLeave path empty to use %AppData%\\SCTelemetry\\events.jsonl.\nWhen the file exceeds the size limit it is deleted and a new file starts.",
             AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep",
         });
         return g;
