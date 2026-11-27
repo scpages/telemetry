@@ -23,9 +23,6 @@ internal sealed class Worker : IDisposable
     private string _rootType = "";
     private DateTime _schemaRetryAt = DateTime.MinValue;
 
-    private readonly List<LogEntry> _actionLog = new();
-    private readonly object _logLock = new();
-    private const int LogMaxEntries = 200;
 
     private CancellationTokenSource? _cts;
     private Task? _loop;
@@ -222,12 +219,12 @@ internal sealed class Worker : IDisposable
             string typeName = AppCore.TriggerResponseType(_schema!);
             var decoded = _decoder!.Decode(raw, typeName);
             string status = decoded.TryGetValue("status", out var s) ? s?.ToString() ?? "OK" : "OK";
-            AppendLog(new LogEntry(DateTime.Now, source, Trunc(requestBody), status, Trunc("{\"status\":\"" + status + "\"}")));
+            AppendLog(new LogEntry(DateTime.Now, source, requestBody, status, "{\"status\":\"" + status + "\"}"));
             return status;
         }
         catch (Exception e)
         {
-            AppendLog(new LogEntry(DateTime.Now, source, Trunc(requestBody), "ERROR", Trunc(Describe(e))));
+            AppendLog(new LogEntry(DateTime.Now, source, requestBody, "ERROR", Describe(e)));
             throw;
         }
     }
@@ -243,30 +240,44 @@ internal sealed class Worker : IDisposable
         try
         {
             var (_, processed) = await CaptureAsync(ct);
-            AppendLog(new LogEntry(DateTime.Now, source, null, "OK", Trunc(processed)));
+            AppendLog(new LogEntry(DateTime.Now, source, null, "OK", processed));
             return processed;
         }
         catch (Exception e)
         {
-            AppendLog(new LogEntry(DateTime.Now, source, null, "ERROR", Trunc(Describe(e))));
+            AppendLog(new LogEntry(DateTime.Now, source, null, "ERROR", Describe(e)));
             throw;
         }
     }
 
-    public IReadOnlyList<LogEntry> GetActionLog() { lock (_logLock) return _actionLog.ToList(); }
-
-    public void ClearActionLog() { lock (_logLock) _actionLog.Clear(); }
-
-    private static string? Trunc(string? s, int max = 200) =>
-        s == null ? null : s.Length <= max ? s : s[..max] + "…";
-
     private void AppendLog(LogEntry entry)
     {
-        lock (_logLock)
+        if (!_cfg.EventLogEnabled) return;
+        try
         {
-            if (_actionLog.Count >= LogMaxEntries) _actionLog.RemoveAt(0);
-            _actionLog.Add(entry);
+            string path = _cfg.EffectiveLogPath;
+            string? dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+            if (File.Exists(path) && new FileInfo(path).Length > _cfg.EventLogMaxMb * 1024L * 1024L)
+            {
+                string bak = path + ".1";
+                if (File.Exists(bak)) File.Delete(bak);
+                File.Move(path, bak);
+            }
+
+            File.AppendAllText(path, BuildLogLine(entry) + "\n");
         }
+        catch { }
+    }
+
+    private static string BuildLogLine(LogEntry e)
+    {
+        var d = new Dictionary<string, string?> { ["ts"] = e.Timestamp.ToString("o"), ["source"] = e.Source };
+        if (e.RequestBody != null) d["req"] = e.RequestBody;
+        d["status"] = e.Status;
+        if (e.ResponseBody != null) d["res"] = e.ResponseBody;
+        return JsonSerializer.Serialize(d);
     }
 
     private static string Describe(Exception e)

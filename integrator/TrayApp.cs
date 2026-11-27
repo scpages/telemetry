@@ -98,6 +98,14 @@ internal sealed class TrayApp : IDisposable
         SaveCfg();
     }
 
+    public void SetEventLog(bool on, string path, int maxMb)
+    {
+        _cfg.EventLogEnabled = on;
+        _cfg.EventLogPath = path?.Trim() ?? "";
+        _cfg.EventLogMaxMb = maxMb > 0 ? maxMb : 10;
+        SaveCfg();
+    }
+
     private void SaveCfg() { try { _cfg.Save(AppCore.ConfigPath); } catch { } }
 
     private void ShowWindow()

@@ -26,8 +26,17 @@ internal sealed class AppConfig
     public bool SaveToFile { get; set; } = false;           // write the latest frame to a file on disk
     public string FilePath { get; set; } = "";              // destination file (empty = disabled)
 
+    public bool EventLogEnabled { get; set; } = false;      // append events to a JSON Lines file
+    public string EventLogPath { get; set; } = "";           // empty = EffectiveLogPath
+    public int EventLogMaxMb { get; set; } = 10;            // rotate when the file exceeds this size
+
     /// <summary>The token actually sent (empty when auth is None).</summary>
     public string EffectiveToken => UseBearer ? Token : "";
+
+    public string EffectiveLogPath =>
+        string.IsNullOrWhiteSpace(EventLogPath)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SCTelemetry", "events.jsonl")
+            : EventLogPath;
 
     public static AppConfig Default() => new();
 
@@ -54,6 +63,11 @@ internal sealed class AppConfig
 
         if (ini.TryGetValue("file_save", out var fs)) cfg.SaveToFile = ParseBool(fs, false);
         if (ini.TryGetValue("file_path", out var fp)) cfg.FilePath = fp.Trim();
+
+        if (ini.TryGetValue("event_log", out var el)) cfg.EventLogEnabled = ParseBool(el, false);
+        if (ini.TryGetValue("event_log_path", out var elp)) cfg.EventLogPath = elp.Trim();
+        if (ini.TryGetValue("event_log_max_mb", out var elmb) &&
+            int.TryParse(elmb.Trim(), out var mb) && mb > 0) cfg.EventLogMaxMb = mb;
 
         return cfg;
     }
@@ -95,6 +109,13 @@ internal sealed class AppConfig
         sb.AppendLine($"file_save = {(SaveToFile ? "true" : "false")}");
         sb.AppendLine("# Destination file for the above (empty = disabled).");
         sb.AppendLine($"file_path = {FilePath}");
+        sb.AppendLine();
+        sb.AppendLine("# Append every telemetry pull and action trigger to a JSON Lines file (true/false).");
+        sb.AppendLine($"event_log = {(EventLogEnabled ? "true" : "false")}");
+        sb.AppendLine("# Event log file path (empty = %AppData%\\SCTelemetry\\events.jsonl).");
+        sb.AppendLine($"event_log_path = {EventLogPath}");
+        sb.AppendLine("# Rotate the log when it exceeds this size in megabytes.");
+        sb.AppendLine($"event_log_max_mb = {EventLogMaxMb}");
 
         File.WriteAllText(path, sb.ToString());
     }

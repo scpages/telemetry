@@ -39,10 +39,10 @@ internal sealed class MainForm : Form
     private readonly CheckBox _fileOn = new() { AutoSize = true };
     private readonly TextBox _filePath = new() { Width = 320 };
 
-    // action log
-    private readonly ListBox _actionLog = new() { BorderStyle = BorderStyle.None };
-    private int _actionLogShown;
-    private Worker? _logWorker;
+    // event log settings
+    private readonly CheckBox _logOn = new() { AutoSize = true };
+    private readonly TextBox _logPath = new() { Width = 320 };
+    private readonly TextBox _logMaxMb = new() { Width = 60 };
 
     // always-visible destinations toggle bar (sits above every page)
     private readonly FlowLayoutPanel _destbar = new() { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, Padding = new Padding(12, 2, 0, 6), Margin = new Padding(0) };
@@ -85,7 +85,7 @@ internal sealed class MainForm : Form
         AddTab("Telemetry", TelemetryPage());
         AddTab("Local server", LocalServerPage());
         AddTab("File", FilePage());
-        AddTab("Log", ActionsPage());
+        AddTab("Log", LogPage());
         AddTab("About", AboutPage());
 
         LoadFrom(cfg);
@@ -106,6 +106,7 @@ internal sealed class MainForm : Form
         _send.CheckedChanged += (_, _) => { if (!_loading) _tray.SetSendData(_send.Checked); };
         _localOn.CheckedChanged += (_, _) => { if (!_loading) { _tray.SetLocal(_localOn.Checked, _localBind.Text.Trim(), ParsePort()); Refresh_(); } };
         _fileOn.CheckedChanged += (_, _) => { if (!_loading) { _tray.SetFile(_fileOn.Checked, _filePath.Text.Trim()); Refresh_(); } };
+        _logOn.CheckedChanged += (_, _) => { if (!_loading) SaveLog(); };
 
         _timer.Tick += (_, _) => Refresh_();
         _timer.Start();
@@ -208,7 +209,7 @@ internal sealed class MainForm : Form
         buttons.Controls.Add(pull); buttons.Controls.Add(data);
         Full(g, Spacer(4));
         Full(g, buttons);
-        Full(g, new Label { Text = "Pull now: fetch a fresh frame immediately (bypasses the interval); logged in the Log tab.\nShow latest data: same pull, displayed in a detail window.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
+        Full(g, new Label { Text = "Pull now: fetch a fresh frame immediately (bypasses the interval).\nShow latest data: same pull, displayed in a detail window.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
         return g;
     }
 
@@ -270,41 +271,48 @@ internal sealed class MainForm : Form
         return _destbar;
     }
 
-    private Control ActionsPage()
+    private Control LogPage()
     {
-        var p = new TableLayoutPanel
+        var g = Page();
+        _logOn.Text = "Enable event log";
+        Full(g, _logOn);
+        _logPath.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        Labeled(g, "Log file path", _logPath);
+        Labeled(g, "Max size (MB)", _logMaxMb);
+
+        var save = new Button { Text = "Save", Width = 90, Height = 28 };
+        save.Click += (_, _) => SaveLog();
+        var browse = new Button { Text = "Browse…", Width = 100, Height = 28 };
+        browse.Click += (_, _) => BrowseLog();
+        var buttons = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 8, 0, 4) };
+        buttons.Controls.Add(save); buttons.Controls.Add(browse);
+        Full(g, buttons);
+        Full(g, new Label
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3,
-            BackColor = Theme.Panel, Padding = new Padding(12, 10, 12, 10),
-        };
-        p.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        p.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        p.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            Text = "Events are written as JSON Lines (one object per line, .jsonl).\nOne entry per telemetry pull and per action trigger.\nLeave path empty to use %AppData%\\SCTelemetry\\events.jsonl.\nWhen the file exceeds the size limit it is renamed to events.jsonl.1 and a new file starts.",
+            AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep",
+        });
+        return g;
+    }
 
-        var hint = new Label
+    private void SaveLog()
+    {
+        int maxMb = int.TryParse(_logMaxMb.Text.Trim(), out var m) && m > 0 ? m : 10;
+        _tray.SetEventLog(_logOn.Checked, _logPath.Text.Trim(), maxMb);
+    }
+
+    private void BrowseLog()
+    {
+        using var dlg = new SaveFileDialog
         {
-            Text = "Telemetry pulls (pull now / POST /api/v1/telemetry) and action triggers (POST /api/v1/action).",
-            AutoSize = true, ForeColor = Theme.Muted, Margin = new Padding(0, 0, 0, 6), Tag = "keep",
+            Title = "Event log file",
+            Filter = "JSON Lines|*.jsonl|All files|*.*",
+            FileName = _logPath.Text.Trim().Length > 0 ? Path.GetFileName(_logPath.Text.Trim()) : "events.jsonl",
+            OverwritePrompt = false,
         };
-
-        _actionLog.Dock = DockStyle.Fill;
-        _actionLog.BackColor = Theme.Bg;
-        _actionLog.ForeColor = Theme.Text;
-        _actionLog.Font = new Font("Consolas", 8.5f);
-        _actionLog.Margin = new Padding(0, 0, 0, 6);
-
-        var clear = new Button { Text = "Clear", Width = 80, Height = 28, Margin = new Padding(0) };
-        clear.Click += (_, _) =>
-        {
-            _tray.CurrentWorker?.ClearActionLog();
-            _actionLog.Items.Clear();
-            _actionLogShown = 0;
-        };
-
-        p.Controls.Add(hint, 0, 0);
-        p.Controls.Add(_actionLog, 0, 1);
-        p.Controls.Add(clear, 0, 2);
-        return p;
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+        _logPath.Text = dlg.FileName;
+        SaveLog();
     }
 
     private Control AboutPage()
@@ -382,6 +390,9 @@ internal sealed class MainForm : Form
         _localPort.Text = cfg.LocalPort.ToString(CultureInfo.InvariantCulture);
         _fileOn.Checked = cfg.SaveToFile;
         _filePath.Text = cfg.FilePath;
+        _logOn.Checked = cfg.EventLogEnabled;
+        _logPath.Text = cfg.EventLogPath;
+        _logMaxMb.Text = cfg.EventLogMaxMb.ToString(CultureInfo.InvariantCulture);
         _loading = false;
     }
 
@@ -411,6 +422,9 @@ internal sealed class MainForm : Form
             LocalPort = ParsePort(),
             SaveToFile = _fileOn.Checked,
             FilePath = _filePath.Text.Trim(),
+            EventLogEnabled = _logOn.Checked,
+            EventLogPath = _logPath.Text.Trim(),
+            EventLogMaxMb = int.TryParse(_logMaxMb.Text.Trim(), out var logMb) && logMb > 0 ? logMb : 10,
         };
     }
 
@@ -488,44 +502,7 @@ internal sealed class MainForm : Form
         _lastUpload.ForeColor = Theme.Muted;
 
         UpdateLocalStatus();
-        RefreshActionLog();
         _tray.UpdateIcon();
-    }
-
-    private void RefreshActionLog()
-    {
-        Worker? w = _tray.CurrentWorker;
-        if (w != _logWorker)
-        {
-            _actionLog.Items.Clear();
-            _actionLogShown = 0;
-            _logWorker = w;
-        }
-        if (w == null) return;
-
-        var log = w.GetActionLog();
-        if (_actionLogShown >= log.Count) return;
-
-        bool atBottom = _actionLog.Items.Count == 0 ||
-            _actionLog.TopIndex >= _actionLog.Items.Count - (_actionLog.Height / Math.Max(_actionLog.ItemHeight, 1)) - 1;
-
-        for (int i = _actionLogShown; i < log.Count; i++)
-        {
-            var e = log[i];
-            var sb = new System.Text.StringBuilder();
-            sb.Append($"{e.Timestamp:HH:mm:ss}  {e.Source}");
-            if (e.RequestBody != null) sb.Append($"  req:{e.RequestBody}");
-            sb.Append($"  →  {e.Status}");
-            if (e.ResponseBody != null) sb.Append($"  res:{e.ResponseBody}");
-            _actionLog.Items.Add(sb.ToString());
-        }
-        _actionLogShown = log.Count;
-
-        if (atBottom)
-        {
-            _actionLog.SelectedIndex = _actionLog.Items.Count - 1;
-            _actionLog.SelectedIndex = -1;
-        }
     }
 
     private void UpdateLocalStatus()
