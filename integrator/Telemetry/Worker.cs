@@ -91,6 +91,7 @@ internal sealed class Worker : IDisposable
                 else
                 {
                     var (_, processed) = await CaptureAsync(ct);   // sets TelemetryUp + LastFrame
+                    AppendLog(new LogEntry(DateTime.Now, "interval", null, "OK", processed));
                     if (_cfg.SaveToFile) WriteFile(processed);
                     if (_cfg.SendData)
                     {
@@ -111,9 +112,9 @@ internal sealed class Worker : IDisposable
             catch (Exception e)
             {
                 LastError = Describe(e);
-                // distinguish a game-side failure from an upload-side one for the indicators
                 if (e is IOException || (e is HttpRequestException && _lastStage == Stage.Pull)) TelemetryUp = false;
                 else UploadUp = false;
+                AppendLog(new LogEntry(DateTime.Now, "interval", null, "ERROR", Describe(e)));
             }
 
             try { await Task.Delay(wait, ct); }
