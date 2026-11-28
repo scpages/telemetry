@@ -233,7 +233,7 @@ internal sealed class MainForm : Form
         _filePath.Anchor = AnchorStyles.Left | AnchorStyles.Right;
         Labeled(g, "File path", _filePath);
 
-        var save = new Button { Text = "Save", Width = 90, Height = 28 };
+        var save = new Button { Text = "Set", Width = 90, Height = 28 };
         save.Click += (_, _) => _tray.SetFile(_fileOn.Checked, _filePath.Text.Trim());
         var browse = new Button { Text = "Browse…", Width = 100, Height = 28 };
         browse.Click += (_, _) => BrowseFile();
