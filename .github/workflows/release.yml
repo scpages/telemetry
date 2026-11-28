@@ -37,9 +37,11 @@ jobs:
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:EnableCompressionInSingleFile=true
           -o publish
-      - name: Rename asset
+      - name: Rename asset and generate checksum
         shell: pwsh
-        run: Copy-Item publish/Integrator.exe SCTelemetry-Integrator.exe
+        run: |
+          Copy-Item publish/Integrator.exe SCTelemetry-Integrator.exe
+          (Get-FileHash SCTelemetry-Integrator.exe -Algorithm SHA256).Hash | Out-File -NoNewline SCTelemetry-Integrator.exe.sha256
 
       # Touch Portal plugin: build the exe, then zip entry.tp + exe into a .tpp
       # (a zip whose single top-level folder is the plugin folder TP expects).
@@ -70,9 +72,9 @@ jobs:
           TAG: ${{ inputs.tag || github.ref_name }}
           SHA: ${{ github.sha }}
         run: |
-          $notes = "Self-contained Windows builds — no .NET install needed.`n`n- **SCTelemetry-Integrator.exe** — the Integrator; download and run.`n- **JsonHttpFetcher.tpp** — Touch Portal plugin; import via Settings > Import plug-in."
-          gh release create "$env:TAG" SCTelemetry-Integrator.exe JsonHttpFetcher.tpp --target "$env:SHA" --title "SCTelemetry $env:TAG" --notes "$notes"
+          $notes = "Self-contained Windows builds — no .NET install needed.`n`n- **SCTelemetry-Integrator.exe** — the Integrator; download and run.`n- **SCTelemetry-Integrator.exe.sha256** — SHA256 checksum.`n- **JsonHttpFetcher.tpp** — Touch Portal plugin; import via Settings > Import plug-in."
+          gh release create "$env:TAG" SCTelemetry-Integrator.exe SCTelemetry-Integrator.exe.sha256 JsonHttpFetcher.tpp --target "$env:SHA" --title "SCTelemetry $env:TAG" --notes "$notes"
           if ($LASTEXITCODE -ne 0) {
             Write-Host "Release already exists — uploading assets instead."
-            gh release upload "$env:TAG" SCTelemetry-Integrator.exe JsonHttpFetcher.tpp --clobber
+            gh release upload "$env:TAG" SCTelemetry-Integrator.exe SCTelemetry-Integrator.exe.sha256 JsonHttpFetcher.tpp --clobber
           }
