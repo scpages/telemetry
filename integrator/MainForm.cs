@@ -44,8 +44,6 @@ internal sealed class MainForm : Form
     private readonly TextBox _logPath = new() { Width = 320 };
     private readonly TextBox _logMaxMb = new() { Width = 60 };
 
-    // always-visible destinations toggle bar (sits above every page)
-    private readonly FlowLayoutPanel _destbar = new() { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, Padding = new Padding(12, 2, 0, 6), Margin = new Padding(0) };
 
     // tabs
     private readonly FlowLayoutPanel _tabbar = new() { Dock = DockStyle.Top, AutoSize = true, WrapContents = false, Padding = new Padding(10, 8, 0, 0), Margin = new Padding(0) };
@@ -68,16 +66,14 @@ internal sealed class MainForm : Form
 
         _auth.Items.AddRange(new object[] { "None", "Bearer" });
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, BackColor = Theme.Bg };
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = Theme.Bg };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var header = Header();
         root.Controls.Add(header, 0, 0);
         root.Controls.Add(_tabbar, 0, 1);
-        root.Controls.Add(BuildDestBar(), 0, 2);
-        root.Controls.Add(_host, 0, 3);
+        root.Controls.Add(_host, 0, 2);
         Controls.Add(root);
 
         AddTab("Status", StatusPage());
@@ -96,7 +92,6 @@ internal sealed class MainForm : Form
         root.BackColor = Theme.Bg;
         header.BackColor = Theme.Bg;
         _tabbar.BackColor = Theme.Bg;
-        _destbar.BackColor = Theme.Bg;
         _host.BackColor = Theme.Panel;
         Select(_tabs[0].btn.Text);
 
@@ -176,6 +171,9 @@ internal sealed class MainForm : Form
     private Control DestinationPage()
     {
         var g = Page();
+        _send.Text = "Enable upload";
+        Full(g, _send);
+        Full(g, Spacer(4));
         _url.Anchor = AnchorStyles.Left | AnchorStyles.Right;
         _token.Anchor = AnchorStyles.Left | AnchorStyles.Right;
         Labeled(g, "Upload URL", _url);
@@ -191,7 +189,7 @@ internal sealed class MainForm : Form
         buttons.Controls.Add(save); buttons.Controls.Add(test);
         Full(g, buttons);
         Full(g, _testResult);
-        Full(g, new Label { Text = "POSTs the decoded JSON to the URL above. Toggle sending in the Destinations bar.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
+        Full(g, new Label { Text = "POSTs the decoded JSON to the URL above.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
         return g;
     }
 
@@ -216,19 +214,25 @@ internal sealed class MainForm : Form
     private Control LocalServerPage()
     {
         var g = Page();
+        _localOn.Text = "Enable local HTTP server";
+        Full(g, _localOn);
+        Full(g, Spacer(4));
         Labeled(g, "Bind address", _localBind);
         Labeled(g, "Port", _localPort);
         Full(g, Spacer(2));
         Full(g, _localStatus);
         _localOpen.Click += (_, _) => OpenUrl(LocalUrl());
         Full(g, _localOpen);
-        Full(g, new Label { Text = "GET / → endpoint index\nGET /api/v1/telemetry → latest cached frame (?path=a.b.c)  ·  POST → fresh pull\nGET /api/v1/actions → action list  ·  POST /api/v1/action → trigger action\nEnable in the Destinations bar.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
+        Full(g, new Label { Text = "GET / → endpoint index\nGET /api/v1/telemetry → latest cached frame (?path=a.b.c)  ·  POST → fresh pull\nGET /api/v1/actions → action list  ·  POST /api/v1/action → trigger action", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
         return g;
     }
 
     private Control FilePage()
     {
         var g = Page();
+        _fileOn.Text = "Enable save to file";
+        Full(g, _fileOn);
+        Full(g, Spacer(4));
         _filePath.Anchor = AnchorStyles.Left | AnchorStyles.Right;
         Labeled(g, "File path", _filePath);
 
@@ -239,7 +243,7 @@ internal sealed class MainForm : Form
         var buttons = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 8, 0, 4) };
         buttons.Controls.Add(save); buttons.Controls.Add(browse);
         Full(g, buttons);
-        Full(g, new Label { Text = "Writes the latest frame (the uploaded JSON) to this file every cycle, overwriting it.\nEnable it in the Destinations bar.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
+        Full(g, new Label { Text = "Writes the latest frame (the uploaded JSON) to this file every cycle, overwriting it.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
         return g;
     }
 
@@ -255,20 +259,6 @@ internal sealed class MainForm : Form
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         _filePath.Text = dlg.FileName;
         if (!_loading) _tray.SetFile(_fileOn.Checked, _filePath.Text.Trim());
-    }
-
-    /// <summary>The always-visible "Destinations:" strip with the three enable toggles.</summary>
-    private Control BuildDestBar()
-    {
-        var lbl = new Label { Text = "Destinations:", AutoSize = true, ForeColor = Theme.Muted, Margin = new Padding(0, 4, 10, 0), Tag = "keep" };
-        _send.Text = "Upload"; _send.Margin = new Padding(0, 3, 14, 0);
-        _localOn.Text = "Local server"; _localOn.Margin = new Padding(0, 3, 14, 0);
-        _fileOn.Text = "Save to file"; _fileOn.Margin = new Padding(0, 3, 0, 0);
-        _destbar.Controls.Add(lbl);
-        _destbar.Controls.Add(_send);
-        _destbar.Controls.Add(_localOn);
-        _destbar.Controls.Add(_fileOn);
-        return _destbar;
     }
 
     private Control LogPage()
