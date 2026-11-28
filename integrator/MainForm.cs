@@ -204,10 +204,12 @@ internal sealed class MainForm : Form
 
         var pull = new Button { Text = "Pull now", Width = 120, Height = 30 };
         pull.Click += async (_, _) => await OnForcePull(pull);
-        var data = new Button { Text = "Show latest data", Width = 160, Height = 30 };
+        var data = new Button { Text = "Show latest telemetry data", Width = 210, Height = 30 };
         data.Click += async (_, _) => await OnShowData();
+        var actions = new Button { Text = "Show actions", Width = 140, Height = 30 };
+        actions.Click += async (_, _) => await OnShowActions(actions);
         var buttons = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 8, 0, 4) };
-        buttons.Controls.Add(pull); buttons.Controls.Add(data);
+        buttons.Controls.Add(pull); buttons.Controls.Add(data); buttons.Controls.Add(actions);
         Full(g, Spacer(4));
         Full(g, buttons);
         return g;
@@ -473,6 +475,22 @@ internal sealed class MainForm : Form
             f.ShowDialog(this);
         }
         catch (Exception e) { MessageBox.Show(this, e.Message, "Latest data", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+    }
+
+    private async Task OnShowActions(Button btn)
+    {
+        Worker? w = _tray.CurrentWorker;
+        if (w == null) { MessageBox.Show(this, "Not started yet.", "Actions"); return; }
+        if (!w.GameRunning) { MessageBox.Show(this, "The game is not running.", "Actions"); return; }
+        btn.Enabled = false;
+        try
+        {
+            string json = await w.ListActionsJsonAsync(CancellationToken.None);
+            using var f = DataForm.SinglePane("Triggerable actions", json);
+            f.ShowDialog(this);
+        }
+        catch (Exception e) { MessageBox.Show(this, e.Message, "Actions", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        finally { btn.Enabled = true; }
     }
 
     private void Refresh_()

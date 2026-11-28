@@ -28,6 +28,18 @@ internal sealed class DataForm : Form
         Controls.Add(split);
     }
 
+    public static DataForm SinglePane(string title, string json)
+    {
+        var f = new DataForm("", "")
+        {
+            Text = title,
+            ClientSize = new Size(600, 560),
+        };
+        f.Controls.Clear();
+        f.Controls.Add(MakePane(title, json));
+        return f;
+    }
+
     private static Control MakePane(string title, string text)
     {
         var panel = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Bg, Padding = new Padding(8) };
