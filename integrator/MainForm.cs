@@ -206,12 +206,15 @@ internal sealed class MainForm : Form
         Labeled(g, "Game source", _source);
         Labeled(g, "Interval (s)", _interval);
 
+        var set = new Button { Text = "Set", Width = 90, Height = 28 };
+        set.Click += (_, _) => OnSave();
+        Full(g, set);
+        Full(g, Spacer(8));
         _btnPull.Click += async (_, _) => await OnForcePull(_btnPull);
         _btnData.Click += async (_, _) => await OnShowData();
         _btnActions.Click += async (_, _) => await OnShowActions(_btnActions);
-        var buttons = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 8, 0, 4) };
+        var buttons = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 4, 0, 4) };
         buttons.Controls.Add(_btnPull); buttons.Controls.Add(_btnData); buttons.Controls.Add(_btnActions);
-        Full(g, Spacer(4));
         Full(g, buttons);
         return g;
     }
