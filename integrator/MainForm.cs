@@ -522,10 +522,10 @@ internal sealed class MainForm : Form
         bool open = _tray.Local.Running;
         foreach (var b in _openBtns) b.Enabled = open;
 
-        bool gameUp = w?.GameRunning == true;
-        _btnPull.Enabled = gameUp;
-        _btnData.Enabled = gameUp;
-        _btnActions.Enabled = gameUp;
+        bool grpcUp = w?.TelemetryUp == true;
+        _btnPull.Enabled = grpcUp;
+        _btnData.Enabled = grpcUp;
+        _btnActions.Enabled = grpcUp;
 
         _tray.UpdateIcon();
     }
