@@ -19,9 +19,9 @@ internal sealed class MainForm : Form
     private readonly CheckBox _ssl = new() { Text = "Verify TLS certificate", AutoSize = true };
     private readonly ComboBox _auth = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 120 };
     private readonly TextBox _token = new();
-    private readonly TextBox _source = new() { Width = 180 };
+    private readonly TextBox _source = new();
     private readonly TextBox _interval = new() { Width = 70 };
-    private readonly Label _testResult = new() { AutoSize = true, MaximumSize = new Size(440, 0) };
+    private readonly Label _testResult = new() { AutoSize = true, MaximumSize = new Size(560, 0) };
 
     // controls
     private readonly Button _startStop = new() { Width = 120, Height = 32 };
@@ -33,7 +33,7 @@ internal sealed class MainForm : Form
 
     // local server
     private readonly CheckBox _localOn = new() { Text = "Expose latest frame over local HTTP (no auth)", AutoSize = true };
-    private readonly TextBox _localBind = new() { Width = 180 };
+    private readonly TextBox _localBind = new();
     private readonly TextBox _localPort = new() { Width = 70 };
     private readonly List<Button> _openBtns = new();
 
@@ -202,6 +202,7 @@ internal sealed class MainForm : Form
     {
         var g = Page();
         Full(g, PageDesc("Configuration of Star Citizen telemetry endpoint."));
+        _source.Anchor = AnchorStyles.Left | AnchorStyles.Right;
         Labeled(g, "Game source", _source);
         Labeled(g, "Interval (s)", _interval);
 
@@ -222,6 +223,7 @@ internal sealed class MainForm : Form
         _localOn.Text = "Enable local HTTP server";
         Full(g, _localOn);
         Full(g, Spacer(4));
+        _localBind.Anchor = AnchorStyles.Left | AnchorStyles.Right;
         Labeled(g, "Bind address", _localBind);
         Labeled(g, "Port", _localPort);
         Full(g, Spacer(4));
@@ -307,7 +309,7 @@ internal sealed class MainForm : Form
     {
         var g = Page();
         Full(g, new Label { Text = "SCTELEMETRY Integrator", AutoSize = true, ForeColor = Theme.Accent, Font = new Font("Segoe UI", 12, FontStyle.Bold), Margin = new Padding(0, 0, 0, 4), Tag = "keep" });
-        Full(g, new Label { Text = "Reads Star Citizen's local gRPC telemetry, decodes it to readable JSON\nand uploads it (and/or serves it locally). Zero dependencies.", AutoSize = true, ForeColor = Theme.Text, MaximumSize = new Size(470, 0) });
+        Full(g, new Label { Text = "Reads Star Citizen's local gRPC telemetry, decodes it to readable JSON\nand uploads it (and/or serves it locally). Zero dependencies.", AutoSize = true, ForeColor = Theme.Text, MaximumSize = new Size(560, 0) });
         Full(g, Spacer(8));
         Full(g, new Label { Text = $"Version {AppCore.Version}", AutoSize = true, ForeColor = Theme.Muted, Tag = "keep" });
         var link = new LinkLabel { Text = AppCore.Repo, AutoSize = true };
@@ -339,7 +341,7 @@ internal sealed class MainForm : Form
     private static Label PageDesc(string text) => new()
     {
         Text = text, AutoSize = true, ForeColor = Theme.Muted,
-        MaximumSize = new Size(460, 0), Margin = new Padding(0, 0, 0, 8), Tag = "keep",
+        MaximumSize = new Size(560, 0), Margin = new Padding(0, 0, 0, 8), Tag = "keep",
     };
 
     private static Label Dot() => new() { Text = "●", AutoSize = true, Font = new Font("Segoe UI", 11), ForeColor = Theme.Grey, Margin = new Padding(0, 2, 6, 2) };
