@@ -19,6 +19,8 @@ dotnet publish Integrator.csproj ^
   -p:PublishSingleFile=true ^
   -p:IncludeNativeLibrariesForSelfExtract=true ^
   -p:EnableCompressionInSingleFile=true ^
+  -p:DebugType=none ^
+  -p:DebugSymbols=false ^
   -o %OUT%
 
 if errorlevel 1 (
@@ -29,7 +31,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-copy /y %OUT%\Integrator.exe %OUT%\SCTelemetry-Integrator.exe >nul
+move /y %OUT%\Integrator.exe %OUT%\SCTelemetry-Integrator.exe >nul
 
 powershell -NoProfile -Command "Get-FileHash '%OUT%\SCTelemetry-Integrator.exe' -Algorithm SHA256 | Select-Object -ExpandProperty Hash" > %OUT%\SCTelemetry-Integrator.exe.sha256
 
