@@ -19,5 +19,8 @@ if errorlevel 1 (
 
 copy /y %OUT%\Integrator.exe %OUT%\SCTelemetry-Integrator.exe >nul
 
+powershell -NoProfile -Command "Get-FileHash '%OUT%\SCTelemetry-Integrator.exe' -Algorithm SHA256 | Select-Object -ExpandProperty Hash" > %OUT%\SCTelemetry-Integrator.exe.sha256
+
 echo.
 echo Done: %OUT%\SCTelemetry-Integrator.exe
+type %OUT%\SCTelemetry-Integrator.exe.sha256
