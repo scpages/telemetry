@@ -15,10 +15,10 @@ internal sealed class MainForm : Form
     private readonly Label _lblGame = new(), _lblTele = new(), _lblSchema = new(), _lblUpload = new();
 
     // settings
-    private readonly TextBox _url = new() { Width = 340 };
+    private readonly TextBox _url = new();
     private readonly CheckBox _ssl = new() { Text = "Verify TLS certificate", AutoSize = true };
     private readonly ComboBox _auth = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 120 };
-    private readonly TextBox _token = new() { Width = 340 };
+    private readonly TextBox _token = new();
     private readonly TextBox _source = new() { Width = 180 };
     private readonly TextBox _interval = new() { Width = 70 };
     private readonly Label _testResult = new() { AutoSize = true, MaximumSize = new Size(440, 0) };
@@ -39,11 +39,11 @@ internal sealed class MainForm : Form
 
     // save-to-file destination
     private readonly CheckBox _fileOn = new() { AutoSize = true };
-    private readonly TextBox _filePath = new() { Width = 320 };
+    private readonly TextBox _filePath = new();
 
     // event log settings
     private readonly CheckBox _logOn = new() { AutoSize = true };
-    private readonly TextBox _logPath = new() { Width = 320 };
+    private readonly TextBox _logPath = new();
     private readonly TextBox _logMaxMb = new() { Width = 60 };
 
 
