@@ -25,6 +25,9 @@ internal sealed class MainForm : Form
 
     // controls
     private readonly Button _startStop = new() { Width = 120, Height = 32 };
+    private readonly Button _btnPull    = new() { Text = "Pull now",                    Width = 120, Height = 30, Enabled = false };
+    private readonly Button _btnData    = new() { Text = "Show latest telemetry data",  Width = 210, Height = 30, Enabled = false };
+    private readonly Button _btnActions = new() { Text = "Show actions",                Width = 140, Height = 30, Enabled = false };
     private readonly CheckBox _send = new() { Text = "Send data to the server (upload)", AutoSize = true };
     private readonly Label _lastUpload = new() { AutoSize = true };
 
@@ -202,14 +205,11 @@ internal sealed class MainForm : Form
         Labeled(g, "Game source", _source);
         Labeled(g, "Interval (s)", _interval);
 
-        var pull = new Button { Text = "Pull now", Width = 120, Height = 30 };
-        pull.Click += async (_, _) => await OnForcePull(pull);
-        var data = new Button { Text = "Show latest telemetry data", Width = 210, Height = 30 };
-        data.Click += async (_, _) => await OnShowData();
-        var actions = new Button { Text = "Show actions", Width = 140, Height = 30 };
-        actions.Click += async (_, _) => await OnShowActions(actions);
+        _btnPull.Click += async (_, _) => await OnForcePull(_btnPull);
+        _btnData.Click += async (_, _) => await OnShowData();
+        _btnActions.Click += async (_, _) => await OnShowActions(_btnActions);
         var buttons = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 8, 0, 4) };
-        buttons.Controls.Add(pull); buttons.Controls.Add(data); buttons.Controls.Add(actions);
+        buttons.Controls.Add(_btnPull); buttons.Controls.Add(_btnData); buttons.Controls.Add(_btnActions);
         Full(g, Spacer(4));
         Full(g, buttons);
         return g;
@@ -521,6 +521,12 @@ internal sealed class MainForm : Form
 
         bool open = _tray.Local.Running;
         foreach (var b in _openBtns) b.Enabled = open;
+
+        bool gameUp = w?.GameRunning == true;
+        _btnPull.Enabled = gameUp;
+        _btnData.Enabled = gameUp;
+        _btnActions.Enabled = gameUp;
+
         _tray.UpdateIcon();
     }
 
