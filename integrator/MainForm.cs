@@ -32,7 +32,6 @@ internal sealed class MainForm : Form
     private readonly CheckBox _localOn = new() { Text = "Expose latest frame over local HTTP (no auth)", AutoSize = true };
     private readonly TextBox _localBind = new() { Width = 180 };
     private readonly TextBox _localPort = new() { Width = 70 };
-    private readonly Label _localStatus = new() { AutoSize = true };
     private readonly Button _localOpen = new() { Text = "Open in browser", Width = 150, Height = 28, Enabled = false };
 
     // save-to-file destination
@@ -219,11 +218,9 @@ internal sealed class MainForm : Form
         Full(g, Spacer(4));
         Labeled(g, "Bind address", _localBind);
         Labeled(g, "Port", _localPort);
-        Full(g, Spacer(2));
-        Full(g, _localStatus);
+        Full(g, Spacer(4));
         _localOpen.Click += (_, _) => OpenUrl(LocalUrl());
         Full(g, _localOpen);
-        Full(g, new Label { Text = "GET / → endpoint index\nGET /api/v1/telemetry → latest cached frame (?path=a.b.c)  ·  POST → fresh pull\nGET /api/v1/actions → action list  ·  POST /api/v1/action → trigger action", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
         return g;
     }
 
@@ -491,19 +488,8 @@ internal sealed class MainForm : Form
             : "Last successful upload: never";
         _lastUpload.ForeColor = Theme.Muted;
 
-        UpdateLocalStatus();
+        _localOpen.Enabled = _tray.Local.Running;
         _tray.UpdateIcon();
-    }
-
-    private void UpdateLocalStatus()
-    {
-        LocalServer ls = _tray.Local;
-        if (!_tray.Config.LocalServerEnabled) { _localStatus.Text = "Status: off"; _localStatus.ForeColor = Theme.Muted; }
-        else if (ls.Error != null) { _localStatus.Text = "Status: error — " + ls.Error; _localStatus.ForeColor = Theme.Red; }
-        else if (ls.Running) { _localStatus.Text = "Status: serving at " + ls.Prefix.Replace("+", _tray.Config.LocalBind); _localStatus.ForeColor = Theme.Green; }
-        else { _localStatus.Text = "Status: starting…"; _localStatus.ForeColor = Theme.Muted; }
-
-        _localOpen.Enabled = ls.Running;
     }
 
     private static void Set(Label dot, Label text, string caption, bool ok, string okWord, string badWord, bool neutralWhenGameOff = false, bool gameOn = true)
