@@ -62,7 +62,7 @@ internal sealed class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
-        ClientSize = new Size(524, 500);
+        ClientSize = new Size(620, 500);
         BackColor = Theme.Bg;
         if (AppCore.AppIcon is { } appIcon) Icon = appIcon;
 
