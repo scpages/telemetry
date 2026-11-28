@@ -173,6 +173,7 @@ internal sealed class MainForm : Form
     private Control DestinationPage()
     {
         var g = Page();
+        Full(g, PageDesc("Configure HTTP endpoint where to send game data collected from the telemetry."));
         _send.Text = "Enable upload";
         Full(g, _send);
         Full(g, Spacer(4));
@@ -191,13 +192,13 @@ internal sealed class MainForm : Form
         buttons.Controls.Add(save); buttons.Controls.Add(test);
         Full(g, buttons);
         Full(g, _testResult);
-        Full(g, new Label { Text = "POSTs the decoded JSON to the URL above.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
         return g;
     }
 
     private Control TelemetryPage()
     {
         var g = Page();
+        Full(g, PageDesc("Configuration of Star Citizen telemetry endpoint."));
         Labeled(g, "Game source", _source);
         Labeled(g, "Interval (s)", _interval);
 
@@ -209,13 +210,13 @@ internal sealed class MainForm : Form
         buttons.Controls.Add(pull); buttons.Controls.Add(data);
         Full(g, Spacer(4));
         Full(g, buttons);
-        Full(g, new Label { Text = "Pull now: fetch a fresh frame immediately (bypasses the interval).\nShow latest data: same pull, displayed in a detail window.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
         return g;
     }
 
     private Control LocalServerPage()
     {
         var g = Page();
+        Full(g, PageDesc("Start a minimalistic local HTTP server for integrations with components working as HTTP clients."));
         _localOn.Text = "Enable local HTTP server";
         Full(g, _localOn);
         Full(g, Spacer(4));
@@ -229,6 +230,7 @@ internal sealed class MainForm : Form
     private Control FilePage()
     {
         var g = Page();
+        Full(g, PageDesc("Save latest data from the telemetry into a local file."));
         _fileOn.Text = "Enable save to file";
         Full(g, _fileOn);
         Full(g, Spacer(4));
@@ -242,7 +244,6 @@ internal sealed class MainForm : Form
         var buttons = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 8, 0, 4) };
         buttons.Controls.Add(save); buttons.Controls.Add(browse);
         Full(g, buttons);
-        Full(g, new Label { Text = "Writes the latest frame (the uploaded JSON) to this file every cycle, overwriting it.", AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep" });
         return g;
     }
 
@@ -263,6 +264,7 @@ internal sealed class MainForm : Form
     private Control LogPage()
     {
         var g = Page();
+        Full(g, PageDesc("Record all interactions and traffic to a JSON based log file. Useful for debugging."));
         _logOn.Text = "Enable event log";
         Full(g, _logOn);
         _logPath.Anchor = AnchorStyles.Left | AnchorStyles.Right;
@@ -276,11 +278,6 @@ internal sealed class MainForm : Form
         var buttons = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 8, 0, 4) };
         buttons.Controls.Add(save); buttons.Controls.Add(browse);
         Full(g, buttons);
-        Full(g, new Label
-        {
-            Text = "Events are written as JSON Lines (one object per line, .jsonl).\nOne entry per telemetry pull and per action trigger.\nLeave path empty to use %AppData%\\SCTelemetry\\events.jsonl.\nWhen the file exceeds the size limit it is deleted and a new file starts.",
-            AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(460, 0), Tag = "keep",
-        });
         return g;
     }
 
@@ -336,6 +333,12 @@ internal sealed class MainForm : Form
         _openBtns.Add(b);
         return b;
     }
+
+    private static Label PageDesc(string text) => new()
+    {
+        Text = text, AutoSize = true, ForeColor = Theme.Muted,
+        MaximumSize = new Size(460, 0), Margin = new Padding(0, 0, 0, 8), Tag = "keep",
+    };
 
     private static Label Dot() => new() { Text = "●", AutoSize = true, Font = new Font("Segoe UI", 11), ForeColor = Theme.Grey, Margin = new Padding(0, 2, 6, 2) };
 
