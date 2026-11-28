@@ -76,11 +76,11 @@ internal sealed class MainForm : Form
         Controls.Add(root);
 
         AddTab("Status", StatusPage());
-        AddTab("Destination", DestinationPage());
         AddTab("Telemetry", TelemetryPage());
+        AddTab("Log", LogPage());
+        AddTab("Destination", DestinationPage());
         AddTab("Local server", LocalServerPage());
         AddTab("File", FilePage());
-        AddTab("Log", LogPage());
         AddTab("About", AboutPage());
 
         LoadFrom(cfg);
