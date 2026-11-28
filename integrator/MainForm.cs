@@ -32,7 +32,7 @@ internal sealed class MainForm : Form
     private readonly CheckBox _localOn = new() { Text = "Expose latest frame over local HTTP (no auth)", AutoSize = true };
     private readonly TextBox _localBind = new() { Width = 180 };
     private readonly TextBox _localPort = new() { Width = 70 };
-    private readonly Button _localOpen = new() { Text = "Open in browser", Width = 150, Height = 28, Enabled = false };
+    private readonly List<Button> _openBtns = new();
 
     // save-to-file destination
     private readonly CheckBox _fileOn = new() { AutoSize = true };
@@ -161,7 +161,10 @@ internal sealed class MainForm : Form
 
         _startStop.Click += (_, _) => { _tray.ToggleRun(); Refresh_(); };
         Full(g, Spacer(6));
-        Full(g, _startStop);
+        var row = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 4, 0, 0), WrapContents = false };
+        row.Controls.Add(_startStop);
+        row.Controls.Add(MakeOpenBtn());
+        Full(g, row);
         _lastUpload.ForeColor = Theme.Muted;
         Full(g, _lastUpload);
         return g;
@@ -219,8 +222,7 @@ internal sealed class MainForm : Form
         Labeled(g, "Bind address", _localBind);
         Labeled(g, "Port", _localPort);
         Full(g, Spacer(4));
-        _localOpen.Click += (_, _) => OpenUrl(LocalUrl());
-        Full(g, _localOpen);
+        Full(g, MakeOpenBtn());
         return g;
     }
 
@@ -326,6 +328,14 @@ internal sealed class MainForm : Form
     }
 
     // ---- layout helpers ----
+
+    private Button MakeOpenBtn()
+    {
+        var b = new Button { Text = "Open in browser", Width = 150, Height = 28, Enabled = false };
+        b.Click += (_, _) => OpenUrl(LocalUrl());
+        _openBtns.Add(b);
+        return b;
+    }
 
     private static Label Dot() => new() { Text = "●", AutoSize = true, Font = new Font("Segoe UI", 11), ForeColor = Theme.Grey, Margin = new Padding(0, 2, 6, 2) };
 
@@ -488,7 +498,8 @@ internal sealed class MainForm : Form
             : "Last successful upload: never";
         _lastUpload.ForeColor = Theme.Muted;
 
-        _localOpen.Enabled = _tray.Local.Running;
+        bool open = _tray.Local.Running;
+        foreach (var b in _openBtns) b.Enabled = open;
         _tray.UpdateIcon();
     }
 
